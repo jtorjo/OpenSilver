@@ -172,7 +172,17 @@ namespace Windows.UI.Xaml.Media
 
             foreach (var root in popupRoots)
             {
-                if (root.INTERNAL_ParentWindow == window && root.INTERNAL_LinkedPopup.IsOpen
+                // john.torjo - on Telerik: RadGridView, click on a Filter, check some items to filter, then click the top "x" to close, 
+                // we'd get an exception on root.INTERNAL_LinkedPopup being null
+                /* Pierre Barjon said:
+                 *
+                    Also, I think we should fix that somewhere else as a PopupRoot stored in INTERNAL_PopupsManager.PopupRootIdentifierToInstance 
+                    should not have a null Popup. Calling INTERNAL_PopupsManager.RemovePopupRoot(...) in Popup.HidePopupRootIfVisible(...) 
+                    right after (or before) setting the LinkedPopup to null would probably be a cleaner fix.                 *
+                 *
+                 *
+                 */
+                if (root.INTERNAL_ParentWindow == window && (root.INTERNAL_LinkedPopup?.IsOpen ?? false)
                                                          && root.INTERNAL_LinkedPopup.Child != null)
                 {
                     result.Add(root.INTERNAL_LinkedPopup);
