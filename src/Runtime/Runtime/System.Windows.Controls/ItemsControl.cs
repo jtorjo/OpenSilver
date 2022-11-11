@@ -501,15 +501,15 @@ namespace Windows.UI.Xaml.Controls
                 if (ItemsHost is VirtualizingPanel vp)
                 {
                     vp.BringIndexIntoViewInternal(index);
+                    vp.UpdateLayout();
                 }
                 else
                 {
                     if (ItemContainerGenerator.ContainerFromIndex(index) is ListBoxItem container
                         && container.INTERNAL_OuterDomElement != null)
                     {
-                        OpenSilver.Interop.ExecuteJavaScript(
-                            "$0.scrollIntoView({ block: 'nearest'})",
-                            container.INTERNAL_OuterDomElement);
+                        OpenSilver.Interop.ExecuteJavaScriptVoid(
+                            $"{CSHTML5.INTERNAL_InteropImplementation.GetVariableStringForJS(container.INTERNAL_OuterDomElement)}.scrollIntoView({{ block: 'nearest' }})");
                     }
                 }
             }
@@ -773,7 +773,7 @@ namespace Windows.UI.Xaml.Controls
         }
 
         internal void NavigateToItem(object item, int elementIndex)
-            => FocusItem(NewItemInfo(item, ItemContainerGenerator.ContainerFromIndex(elementIndex)));
+            => FocusItem(NewItemInfo(item, ItemContainerGenerator.ContainerFromItem(item), elementIndex));
 
         internal virtual bool FocusItem(ItemInfo info) => false;
 

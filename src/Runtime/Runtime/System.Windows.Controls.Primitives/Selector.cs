@@ -569,7 +569,8 @@ namespace Windows.UI.Xaml.Controls.Primitives
             bool returnValue = false;
 
             ScrollIntoViewImpl(info.Index);
-            if (info.Container is ListBoxItem container)
+
+            if ((info.Container ?? ItemContainerGenerator.ContainerFromIndex(info.Index)) is ListBoxItem container)
             {
                 returnValue = container.Focus();
             }
@@ -1376,7 +1377,7 @@ namespace Windows.UI.Xaml.Controls.Primitives
                 "SelectedItemBackground",
                 typeof(Brush),
                 typeof(Selector),
-                new PropertyMetadata(new SolidColorBrush((Color)Color.INTERNAL_ConvertFromString("#FFBADDE9"))));
+                new PropertyMetadata(new SolidColorBrush(Color.INTERNAL_ConvertFromString("#FFBADDE9"))));
 
         /// <summary>
         /// Gets or sets the foreground color of the selected Items.

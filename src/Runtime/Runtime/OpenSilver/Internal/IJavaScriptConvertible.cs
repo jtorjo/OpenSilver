@@ -11,26 +11,10 @@
 *
 \*====================================================================================*/
 
-#if MIGRATION
-using System.Windows.Controls;
-#else
-using Windows.UI.Xaml.Controls;
-#endif
-
-namespace Runtime.OpenSilver.Tests.Maintenance.MemoryLeak
+namespace OpenSilver.Internal
 {
-    public class WebBrowserWithTrackingComponent : WebBrowser
+    internal interface IJavaScriptConvertible
     {
-        private readonly GarbageCollectorTracker _gcTracker;
-
-        public WebBrowserWithTrackingComponent(GarbageCollectorTracker gcTracker)
-        {
-            _gcTracker = gcTracker;
-        }
-
-        ~WebBrowserWithTrackingComponent()
-        {
-            _gcTracker.MarkAsCollected();
-        }
+        string ToJavaScriptString();
     }
 }

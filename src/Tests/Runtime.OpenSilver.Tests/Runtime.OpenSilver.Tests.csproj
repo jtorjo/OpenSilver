@@ -4,6 +4,7 @@
     <TargetFramework>net472</TargetFramework>
     <Configurations>SL;UWP</Configurations>
     <IsPackable>false</IsPackable>
+    <LangVersion>latest</LangVersion>
   </PropertyGroup>
 
   <ItemGroup>
@@ -25,6 +26,10 @@
 
   <ItemGroup>
     <ProjectReference Include="..\..\Runtime\Runtime\Runtime.OpenSilver.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Folder Include="OpenSilver\MemoryLeak\" />
   </ItemGroup>
 
 </Project>
