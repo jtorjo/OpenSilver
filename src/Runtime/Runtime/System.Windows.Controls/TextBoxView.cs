@@ -18,9 +18,12 @@ using CSHTML5.Internal;
 using OpenSilver.Internal;
 using OpenSilver.Internal.Controls;
 
-#if !MIGRATION
+#if MIGRATION
+using System.Windows.Input;
+#else
 using Windows.Foundation;
 using Windows.UI.Text;
+using Windows.UI.Xaml.Input;
 #endif
 
 #if MIGRATION
@@ -29,18 +32,13 @@ namespace System.Windows.Controls
 namespace Windows.UI.Xaml.Controls
 #endif
 {
-    internal class TextBoxView : FrameworkElement, ITextBoxView
+    internal sealed class TextBoxView : FrameworkElement, ITextBoxView
     {
         private object _contentEditableDiv;
 
         internal TextBoxView(TextBox host)
         {
-            if (host == null)
-            {
-                throw new ArgumentNullException(nameof(host));
-            }
-
-            Host = host;
+            Host = host ?? throw new ArgumentNullException(nameof(host));
         }
 
         internal TextBox Host { get; }
@@ -88,11 +86,12 @@ namespace Windows.UI.Xaml.Controls
             // the focus will be redirected to the <input>, unless the click was on an element that
             // absorbs pointer events.
 
-            string sElement = CSHTML5.INTERNAL_InteropImplementation.GetVariableStringForJS(this.INTERNAL_OuterDomElement);
-            string sAction = CSHTML5.INTERNAL_InteropImplementation.GetVariableStringForJS((Action<object>)TextBoxView_GotFocus);
-            OpenSilver.Interop.ExecuteJavaScriptVoid($"{sElement}.addEventListener('click', {sAction})");
-
             UpdateDomText(Host.Text);
+
+            if (FocusManager.GetFocusedElement() == Host)
+            {
+                INTERNAL_HtmlDomManager.SetFocusNative(_contentEditableDiv);
+            }
         }
 
         protected override void OnAfterApplyHorizontalAlignmentAndWidth()
@@ -154,9 +153,14 @@ namespace Windows.UI.Xaml.Controls
             }
         }
 
-        internal sealed override NativeEventsManager CreateEventsManager()
+        internal sealed override void AddEventListeners()
         {
-            return new NativeEventsManager(this, this, Host, true);
+            NativeEventsHelper.AddEventListeners(this, true);
+        }
+
+        internal sealed override void DispatchEvent(object jsEventArg)
+        {
+            NativeEventCallback(this, Host, jsEventArg);
         }
 
         internal override object GetDomElementToSetContentString()
@@ -176,14 +180,11 @@ namespace Windows.UI.Xaml.Controls
             if (INTERNAL_VisualTreeManager.IsElementInVisualTree(this) &&
                 INTERNAL_HtmlDomManager.IsNotUndefinedOrNull(_contentEditableDiv))
             {
-                if (!IsRunningInJavaScript())
-                {
-                    //--- SIMULATOR ONLY: ---
-                    // Set the "data-accepts-return" property (that we have invented) so that the "keydown" JavaScript event can retrieve this value:
-                    INTERNAL_HtmlDomManager.ExecuteJavaScript($@"
+                //--- SIMULATOR ONLY: ---
+                // Set the "data-accepts-return" property (that we have invented) so that the "keydown" JavaScript event can retrieve this value:
+                INTERNAL_HtmlDomManager.ExecuteJavaScript($@"
 var element = document.getElementByIdSafe(""{((INTERNAL_HtmlDomElementReference)_contentEditableDiv).UniqueIdentifier}"");
 element.setAttribute(""data-acceptsreturn"", ""{acceptsReturn.ToString().ToLower()}"");");
-                }
             }
         }
 
@@ -197,11 +198,7 @@ element.setAttribute(""data-acceptsreturn"", ""{acceptsReturn.ToString().ToLower
             UpdateTextAlignment(INTERNAL_HtmlDomManager.GetFrameworkElementOuterStyleForModification(this), alignment);
         }
 
-#if OPENSILVER
         private static void UpdateTextAlignment(INTERNAL_HtmlDomStyleReference style, TextAlignment alignment)
-#elif BRIDGE
-        private static void UpdateTextAlignment(dynamic style, TextAlignment alignment)
-#endif
         {
             switch (alignment)
             {
@@ -248,43 +245,16 @@ element.setAttribute(""data-acceptsreturn"", ""{acceptsReturn.ToString().ToLower
             }
         }
 
-        internal void OnHorizontalScrollBarVisibilityChanged(ScrollBarVisibility scrollVisibility)
-        {
-            if (INTERNAL_HtmlDomManager.IsNotUndefinedOrNull(_contentEditableDiv))
-            {
-                string value = ScrollBarVisibilityToHtmlString(scrollVisibility);
-                if (value != null)
-                {
-                    INTERNAL_HtmlDomManager.GetDomElementStyleForModification(_contentEditableDiv).overflowX = value;
-                }
-            }
-        }
-
-        internal void OnVerticalScrollBarVisibilityChanged(ScrollBarVisibility scrollVisibility)
-        {
-            if (INTERNAL_HtmlDomManager.IsNotUndefinedOrNull(_contentEditableDiv))
-            {
-                string value = ScrollBarVisibilityToHtmlString(scrollVisibility);
-                if (value != null)
-                {
-                    INTERNAL_HtmlDomManager.GetDomElementStyleForModification(_contentEditableDiv).overflowY = value;
-                }
-            }
-        }
-
         internal void OnMaxLengthChanged(int maxLength)
         {
             if (INTERNAL_VisualTreeManager.IsElementInVisualTree(this) && 
                 INTERNAL_HtmlDomManager.IsNotUndefinedOrNull(_contentEditableDiv))
             {
-                if (!IsRunningInJavaScript())
-                {
-                    //--- SIMULATOR ONLY: ---
-                    // Set the "data-maxlength" property (that we have made up) so that the "keydown" JavaScript event can retrieve this value:
-                    INTERNAL_HtmlDomManager.ExecuteJavaScript($@"
+                //--- SIMULATOR ONLY: ---
+                // Set the "data-maxlength" property (that we have made up) so that the "keydown" JavaScript event can retrieve this value:
+                INTERNAL_HtmlDomManager.ExecuteJavaScript($@"
 var element = document.getElementByIdSafe(""{((INTERNAL_HtmlDomElementReference)_contentEditableDiv).UniqueIdentifier}"");
 element.setAttribute(""data-maxlength"", ""{maxLength}"");");
-                }
             }
         }
 
@@ -334,13 +304,18 @@ element.setAttribute(""data-maxlength"", ""{maxLength}"");");
                     $"{sDiv}.setAttribute(\"contentEditable\", \"{(!isReadOnly).ToString().ToLower()}\");"
                 );
 
-                if (!IsRunningInJavaScript())
-                {
-                    //--- SIMULATOR ONLY: ---
-                    OpenSilver.Interop.ExecuteJavaScriptFastAsync($@"
+                //--- SIMULATOR ONLY: ---
+                OpenSilver.Interop.ExecuteJavaScriptFastAsync($@"
 var element = document.getElementByIdSafe(""{((INTERNAL_HtmlDomElementReference)_contentEditableDiv).UniqueIdentifier}"");
 element.setAttribute(""data-isreadonly"",""{isReadOnly.ToString().ToLower()}"");");
-                }
+            }
+        }
+
+        internal void OnIsSpellCheckEnabledChanged(bool isSpellCheckEnabled)
+        {
+            if (INTERNAL_VisualTreeManager.IsElementInVisualTree(this) && _contentEditableDiv != null)
+            {
+                INTERNAL_HtmlDomManager.SetDomElementAttribute(_contentEditableDiv, "spellcheck", isSpellCheckEnabled);
             }
         }
 
@@ -419,21 +394,9 @@ sel.setBaseAndExtent(nodesAndOffsets['startParent'], nodesAndOffsets['startOffse
 
         private object AddContentEditableDomElement(object parentRef, out object domElementWhereToPlaceChildren)
         {
-            bool isReadOnly = this.Host.IsReadOnly;
-            object outerDiv;
-            var outerDivStyle = INTERNAL_HtmlDomManager.CreateDomElementAppendItAndGetStyle("div", parentRef, this, out outerDiv);
-            string backgroundColor = "transparent"; //value when it is templated
+            bool isReadOnly = Host.IsReadOnly;
 
-            outerDivStyle.backgroundColor = backgroundColor;
-            outerDivStyle.height = "100%";
-
-            object middleDiv;
-            var middleDivStyle = INTERNAL_HtmlDomManager.CreateDomElementAppendItAndGetStyle("div", outerDiv, this, out middleDiv);
-            middleDivStyle.width = "100%";
-            middleDivStyle.height = "100%";
-
-            object contentEditableDiv;
-            var contentEditableDivStyle = INTERNAL_HtmlDomManager.CreateDomElementAppendItAndGetStyle("div", middleDiv, this, out contentEditableDiv);
+            var contentEditableDivStyle = INTERNAL_HtmlDomManager.CreateDomElementAppendItAndGetStyle("div", parentRef, this, out object contentEditableDiv);
             _contentEditableDiv = contentEditableDiv;
 
             contentEditableDivStyle.width = "100%";
@@ -441,16 +404,12 @@ sel.setBaseAndExtent(nodesAndOffsets['startParent'], nodesAndOffsets['startOffse
 
             // Apply Host.TextWrapping
             contentEditableDivStyle.whiteSpace = Host.TextWrapping == TextWrapping.NoWrap ? "nowrap" : "pre-wrap";
-
-            // Apply Host.HorizontalScrollBarVisibility
-            contentEditableDivStyle.overflowX = ScrollBarVisibilityToHtmlString(Host.HorizontalScrollBarVisibility) ?? "hidden";
-
-            // Apply Host.VerticalScrollBarVisibility
-            contentEditableDivStyle.overflowY = ScrollBarVisibilityToHtmlString(Host.VerticalScrollBarVisibility) ?? "hidden";
-            
             contentEditableDivStyle.outline = "solid transparent"; // Note: this is to avoind having the weird border when it has the focus. I could have used outlineWidth = "0px" but or some reason, this causes the caret to not work when there is no text.
             contentEditableDivStyle.background = "solid transparent";
             contentEditableDivStyle.cursor = "text";
+
+            // Disable spell check
+            INTERNAL_HtmlDomManager.SetDomElementAttribute(contentEditableDiv, "spellcheck", this.Host.IsSpellCheckEnabled);
 
             // Apply TextAlignment
             UpdateTextAlignment(contentEditableDivStyle, Host.TextAlignment);
@@ -464,211 +423,22 @@ sel.setBaseAndExtent(nodesAndOffsets['startParent'], nodesAndOffsets['startOffse
 
             domElementWhereToPlaceChildren = contentEditableDiv;
 
-            //-----------------------
-            // Prepare to raise the "TextChanged" event and to update the value of the "Text" property when the DOM text changes:
-            //-----------------------
-            //todo: why did we put this here instead of in INTERNAL_AttachToDomEvents?
-            if (IsRunningOnInternetExplorer())
-            {
-                //-----------------------
-                // Fix "input" event not working under IE:
-                //-----------------------
-                this.GotFocus += InternetExplorer_GotFocus;
-                this.LostFocus += InternetExplorer_LostFocus;
-                INTERNAL_EventsHelper.AttachToDomEvents("textinput", contentEditableDiv, (Action<object>)(e =>
-                {
-                    InternetExplorer_RaiseTextChangedIfNecessary();
-                }));
-                INTERNAL_EventsHelper.AttachToDomEvents("paste", contentEditableDiv, (Action<object>)(e =>
-                {
-                    InternetExplorer_RaiseTextChangedIfNecessary();
-                }));
-                INTERNAL_EventsHelper.AttachToDomEvents("cut", contentEditableDiv, (Action<object>)(e =>
-                {
-                    InternetExplorer_RaiseTextChangedIfNecessary();
-                }));
-                INTERNAL_EventsHelper.AttachToDomEvents("keyup", contentEditableDiv, (Action<object>)(e =>
-                {
-                    InternetExplorer_RaiseTextChangedIfNecessary();
-                }));
-                INTERNAL_EventsHelper.AttachToDomEvents("delete", contentEditableDiv, (Action<object>)(e =>
-                {
-                    InternetExplorer_RaiseTextChangedIfNecessary();
-                }));
-                INTERNAL_EventsHelper.AttachToDomEvents("mouseup", contentEditableDiv, (Action<object>)(e =>
-                {
-                    InternetExplorer_RaiseTextChangedIfNecessary();
-                }));
-            }
+            // ---- SIMULATOR ----
+            string uid = ((INTERNAL_HtmlDomElementReference)contentEditableDiv).UniqueIdentifier;
 
-            //-----------------------
-            // Prevent pressing Enter for line break when "AcceptsReturn" is false and prevent pressing any other key than backspace when "MaxLength" is reached:
-            // Also prevent the default event when pressing tab and add "\t" when "AcceptsTab" is set to true:
-            //-----------------------
-            if (IsRunningInJavaScript())
-            {
-#if OPENSILVER
-                throw new InvalidOperationException();
-#elif BRIDGE
-                //BRIDGETODO : here the code below works weird
-                // instance = this
-                // makes instance working properly, where it shouldn't
-                //Note: I think the reason why instance = this works is because it is set with the correct context of "this",
-                //      so instance = this TextBox. If it was inside the function defined as callback of addEventListener,
-                //      "this" would be in the context of the event triggered, so it would be the contentEditable div.
-                Bridge.Script.Write(@"
-var instance = $1;
-$0.addEventListener('keydown', function(e) {
-    if (e.keyCode == 13 && instance.AcceptsReturn !== true)
-    {
-        e.preventDefault();
-        return false;
-    }
-
-    var isAddingTabulation = e.keyCode == 9 && instance.AcceptsTab == true;
-    var isRemovingTabulation = isAddingTabulation && e.shiftKey;
-    if(isRemovingTabulation)
-    {
-        isAddingTabulation = false
-    }
-
-    if((isAddingTabulation || e.keyCode == 13 || e.keyCode == 32 || e.keyCode > 47) && instance.MaxLength != 0)
-    {
-        var textLength = instance.GetTextLengthIncludingNewLineCompensation();
-
-        if (e.keyCode == 13)
-        {
-            textLength += 1; //because adding a new line takes 2 characters instead of 1.
-        }
-        if(textLength >= instance.MaxLength)
-        {
-            e.preventDefault();
-            return false;
-        }
-    }
-
-    if(isAddingTabulation)
-    {
-        //we need to add '\t' where the cursor is, prevent the event (which would change the focus) and dispatch the event for the text changed:
-        var sel, range;
-        if (window.getSelection) {
-            sel = window.getSelection();
-            if (sel.rangeCount) {
-                range = sel.getRangeAt(0);
-                range.deleteContents();
-                range.insertNode(document.createTextNode('\t'));
-                sel.collapseToEnd();
-                range.collapse(false); //for IE
-            }
-        } else if (document.selection && document.selection.createRange) {
-            range = document.selection.createRange();
-            range.text = '\t';
-            document.selection.collapseToEnd();
-        }
-        if (window.IS_EDGE)
-        {
-            sel.removeAllRanges();
-            sel.addRange(range);
-        }
-
-        instance.TextAreaValueChanged(); //todo: test this.
-        e.preventDefault();
-            return false;
-    }
-    if (isRemovingTabulation)
-    {
-        var sel, range;
-        if (window.getSelection) {
-            sel = window.getSelection();
-            if (sel.rangeCount) {
-                range = sel.getRangeAt(0);
-                if(range.collapsed)
-                {
-                    //if the previous character is a '\t', we want to remove it:
-                    var rangeStartContainer = range.startContainer;
-                    var rangeStartOffset = range.startOffset;
-
-                    //we get the node that contains the text that needs changing and the index of the character to remove:
-                    var textNodeToModify = undefined;
-                    var indexToRemove = -1;
-                    if(rangeStartContainer.nodeType == Node.TEXT_NODE && rangeStartOffset > 0)
-                    {
-        
-                        textNodeToModify = rangeStartContainer;
-                        indexToRemove = rangeStartOffset - 1;
-                    }
-                    else //The potential tab to remove is in the node that is right before the selection(caret) so we look at the last character of the 'previous sibling':
-                    {
-                        var previousSibling = undefined;
-
-                        // we get the previous node:
-                        if(rangeStartContainer.nodeType == Node.TEXT_NODE) //the caret was right before the first element of a textNode. I am not sure if we can arrive here since this case seems to be considered as 'the caret is between the nodes' instead of 'the caret is in the node but before the first character'
-                        {
-                            previousSibling = rangeStartContainer.previousSibling;
-                        }
-                        else //the caret is considered between nodes so the range container is the element that contains the text nodes.
-                        {
-                            if(rangeStartOffset > 0) //otherwise, we are at the first character inside a new div (or p), which means at the start of a new line so nothing to remove.
-                            {
-                                previousSibling = rangeStartContainer.childNodes[rangeStartOffset -1];
-                            }
-                        }
-
-                        //We update the node and index to modify:
-                        if(previousSibling != undefined && previousSibling.nodeType == Node.TEXT_NODE)
-                        {
-                            textNodeToModify = previousSibling;
-                            indexToRemove = previousSibling.textContent.length - 1;
-                        } //else, the previous node was not a text node so there has to be a new line between the caret and the previous text so nothing to remove here.
-                    }
-        
-                    if(textNodeToModify != undefined && indexToRemove != -1)
-                    {
-                        //range.startContainer.textContent = range.startContainer.textContent.substring(rangeStartOffset)
-                        var textContent = textNodeToModify.textContent;
-                        if(textContent[indexToRemove] == '\t')
-                        {
-                            var resultingString = textContent.substring(0, indexToRemove); //note: text.substring(0,-1) returns ""
-                            resultingString += textContent.substring(indexToRemove + 1); //note: 'aaa'.substring(25) returns ""
-                            textNodeToModify.textContent = resultingString;
-                        }
-                    }
-    
-                }
-            }
-        }
-        //todo: else.
-        instance.TextAreaValueChanged(); //todo: test this.
-        e.preventDefault();
-            return false;
-    }
-
-}, false);", contentEditableDiv, this);//AcceptsReturn, MaxLength
-#endif
-            }
-#if OPENSILVER
-            else
-            {
-                // ---- SIMULATOR ----
-                string uid = ((INTERNAL_HtmlDomElementReference)contentEditableDiv).UniqueIdentifier;
-
-                // Set the "data-accepts-return" property (that we have invented) so that the "KeyDown" and "Paste" JavaScript events can retrieve this value:
-                // also set the "data-maxlength" and the "data-isreadonly" 
-                INTERNAL_HtmlDomManager.ExecuteJavaScript($@"
+            // Set the "data-accepts-return" property (that we have invented) so that the "KeyDown" and "Paste" JavaScript events can retrieve this value:
+            // also set the "data-maxlength" and the "data-isreadonly" 
+            INTERNAL_HtmlDomManager.ExecuteJavaScript($@"
 var element = document.getElementByIdSafe(""{uid}"");
 element.setAttribute(""data-acceptsreturn"", ""{this.Host.AcceptsReturn.ToString().ToLower()}"");
 element.setAttribute(""data-maxlength"", ""{this.Host.MaxLength}"");
 element.setAttribute(""data-isreadonly"",""{isReadOnly.ToString().ToLower()}"");
 element.setAttribute(""data-acceptstab"", ""{this.Host.AcceptsTab.ToString().ToLower()}"");");
 
-#if CSHTML5BLAZOR
-                if (OpenSilver.Interop.IsRunningInTheSimulator_WorkAround)
-#else
-                if (!IsRunningInJavaScript())
-#endif
-                {
-                    // Register the "keydown" javascript event:
-                    INTERNAL_HtmlDomManager.ExecuteJavaScript($@"
+            if (OpenSilver.Interop.IsRunningInTheSimulator)
+            {
+                // Register the "keydown" javascript event:
+                INTERNAL_HtmlDomManager.ExecuteJavaScript($@"
 var element_OutsideEventHandler = document.getElementByIdSafe(""{uid}"");
 element_OutsideEventHandler.addEventListener('keydown', function(e) {{
 
@@ -738,88 +508,15 @@ element_OutsideEventHandler.addEventListener('keydown', function(e) {{
             return false;
     }}
 }}, false);");//comma added on purpose because we need to get maxLength somehow (see how we did for acceptsReturn).
-                }
             }
-#endif
 
             //-----------------------
             // Enforce only Plain Text + prevent line breaks if "AcceptsReturn" is false. This is required because in a ContentEditable div, the user can paste rich text. Furthermore, on IE, pressing Enter will insert a new paragraph.
             //-----------------------
-            if (IsRunningInJavaScript())
-            {
-#if OPENSILVER
-                throw new InvalidOperationException();
-#elif BRIDGE
-                var acceptsReturn = this.Host.AcceptsReturn;
-                //todo: shouldn't we add a check for maxlength in the script below like in the other versions of this addEventListenter (in the simulator version below and in the #if !BRIDGE part above)?
-                Bridge.Script.Write(@"
-{0}.addEventListener('paste', function(e) {
-    var isReadOnly= {1};
-    if(!isReadOnly)
-    {
-        var isSingleLine = ({2} !== true); // This is the current value at the time when the event is raised.
-        // Chrome supports setting ContentEditable to PlainText-Only, so we try this first:
-        {0}.setAttribute('contenteditable', 'PLAINTEXT-ONLY');
-        if ({0}.contentEditable === 'plaintext-only') // If setting the attribute worked, we can read it back (in lowercase)
-        {
-          // --- CHROME: ---
-          // Nothing else to do about rich text conversion to plain text.
-          // However we still need to remove line breaks if AcceptsReturn is false:
-          if (isSingleLine){
-            e.preventDefault();
-            var content = (e.originalEvent || e).clipboardData.getData('text/plain');
-            content = content.replace(/\n/g, '').replace(/\r/g, '');
-            document.execCommand('insertText', false, content);
-          }
-    }
-    else
-        {
-          {0}.setAttribute('contenteditable', 'true');
-          if (e.clipboardData){
 
-            // --- FIREFOX: ---
-            e.preventDefault();
-            var content = (e.originalEvent || e).clipboardData.getData('text/plain');
-            if (isSingleLine){
-              content = content.replace(/\n/g, '').replace(/\r/g, '');
-            }
-            document.execCommand('insertText', false, content);
-          }
-          else if (window.clipboardData){
-
-            // --- INTERNET EXPLORER: ---
-            e.preventDefault();
-            var content = window.clipboardData.getData('Text');
-            if (window.getSelection)
-            {
-              var newDiv = document.createElement('div');
-              if (isSingleLine){
-                content = content.replace(/\n/g, '').replace(/\r/g, '');
-              }
-              content = content.replace(/\r\n/g, '<br />');
-              newDiv.innerHTML = content.replace(/\n/g, '<br />');
-              var range = window.getSelection().getRangeAt(0);
-              range.deleteContents()
-              range.insertNode( newDiv );
-              //window.getSelection().getRangeAt(0).insertNode( document.createTextNode(content) );
-            }
-          }
-      }
-            }
-  
-}, false);", contentEditableDiv, isReadOnly, acceptsReturn);
-                //BRIDGETODO : check the code up
-#endif
-            }
-#if OPENSILVER
-            else
-            {
-                // ---- SIMULATOR ----
-                string uid = ((INTERNAL_HtmlDomElementReference)contentEditableDiv).UniqueIdentifier;
-
-                // The simulator uses Chrome, so we can set "ContentEditable" to plain-text only:
-                // We still need to prevent prevent line breaks in the pasted text if "AcceptsReturn" is false:
-                INTERNAL_HtmlDomManager.ExecuteJavaScript($@"
+            // The simulator uses Chrome, so we can set "ContentEditable" to plain-text only:
+            // We still need to prevent prevent line breaks in the pasted text if "AcceptsReturn" is false:
+            INTERNAL_HtmlDomManager.ExecuteJavaScript($@"
 var element_OutsideEventHandler = document.getElementByIdSafe(""{uid}"");
 element_OutsideEventHandler.addEventListener('paste', function(e) {{
     var element_InsideEventHandler = document.getElementByIdSafe(""{uid}""); // For some reason we need to get again the reference to the element.
@@ -853,25 +550,16 @@ element_OutsideEventHandler.addEventListener('paste', function(e) {{
         
         }}
     }}
-    
-
 }}, false);");
-            }
-#endif
 
-            return outerDiv;
+            return contentEditableDiv;
         }
 
         internal string GetText()
         {
             string text = INTERNAL_HtmlDomManager.GetTextBoxText(INTERNAL_InnerDomElement) ?? string.Empty;
-            if (!Host.AcceptsReturn)
-            {
-                // This is just in case the user managed to enter multi-line text in a single-line textbox.
-                // It can happen (due to a bug) when pasting multi-line text under Interned Explorer 10.
-                text = text.Replace('\n', '\0').Replace('\r', '\0');
-            }
-
+            // This is the case when the text is changed by backspace or paste.
+            InvalidateMeasure();
             return text;
         }
 
@@ -891,90 +579,9 @@ element_OutsideEventHandler.addEventListener('paste', function(e) {{
                 return;
 
             INTERNAL_HtmlDomManager.SetContentString(this, Host.Text);
-        }
 
-#if BRIDGE
-        private int GetTextLengthIncludingNewLineCompensation()
-        {
-            var text = INTERNAL_HtmlDomManager.GetTextBoxText(this.INTERNAL_InnerDomElement);
-            if (!Host.AcceptsReturn)
-            {
-                text = text.Replace("\n", "").Replace("\r", "");
-            }
-
-            return text.Length; //this is just assuming but since INTERNAL_HtmlDomManager.GetTextBoxText makes sure all new lines are "\r\n" it should be correct.
-        }
-#endif
-
-        private void TextBoxView_GotFocus(object e)
-        {
-            string sE = CSHTML5.INTERNAL_InteropImplementation.GetVariableStringForJS(e);
-            bool ignoreEvent = OpenSilver.Interop.ExecuteJavaScriptBoolean($"document.checkForDivsThatAbsorbEvents({sE})");
-            if (!ignoreEvent)
-            {
-                if (_contentEditableDiv != null)
-                {
-                    string sDiv = CSHTML5.INTERNAL_InteropImplementation.GetVariableStringForJS(_contentEditableDiv);
-                    OpenSilver.Interop.ExecuteJavaScriptVoid($@"
-if({sE}.target != {sDiv}) {{
- {sDiv}.focus()
- if (document.createRange) {{
-  let r = document.createRange();
-  r.selectNodeContents({sDiv});
-  r.collapse(false);
-  let s = window.getSelection();
-  s.removeAllRanges();
-  s.addRange(r);
- }} else if (document.selection) {{
-  let r = document.body.createTextRange();
-  r.moveToElementText({sDiv});
-  r.collapse(false);
-  r.select();
- }}
-}}");
-                    // -- Firefox, Chrome, Opera, Safari, IE 9+
-                    //Create a range (a range is a like the selection but invisible)
-                    //Select the entire contents of the element with the range
-                    //collapse the range to the end point. false means collapse to end rather than the start
-                    //get the selection object (allows you to change selection)
-                    //remove any selections already made
-                    //make the range you have just created the visible selection
-                    // -- IE 8 and lower
-                    //Create a range (a range is a like the selection but invisible)
-                    //Select the entire contents of the element with the range
-                    //collapse the range to the end point. false means collapse to end rather than the start
-                    //Select the range (make it the visible selection
-                }
-            }
-        }
-
-#if BRIDGE
-        private string previousInnerText = null;
-#endif
-
-        private void InternetExplorer_GotFocus(object sender, RoutedEventArgs e)
-        {
-#if BRIDGE
-            previousInnerText = Convert.ToString(CSHTML5.Interop.ExecuteJavaScript("getTextAreaInnerText($0)", _contentEditableDiv));
-#endif
-        }
-
-        private void InternetExplorer_LostFocus(object sender, RoutedEventArgs e)
-        {
-            InternetExplorer_RaiseTextChangedIfNecessary();
-        }
-
-        private void InternetExplorer_RaiseTextChangedIfNecessary()
-        {
-#if BRIDGE
-            string newInnerText = Convert.ToString(OpenSilver.Interop.ExecuteJavaScript("getTextAreaInnerText($0)", _contentEditableDiv));
-            if (newInnerText != previousInnerText)
-            {
-                //todo: I don't know what we should do instead of commenting this (do we even still need this method?)
-                //TextAreaValueChanged();
-                previousInnerText = newInnerText;
-            }
-#endif
+            // This is the case when the text is changed by typing.
+            InvalidateMeasure();
         }
 
         private static string ScrollBarVisibilityToHtmlString(ScrollBarVisibility scrollVisibility)
@@ -994,26 +601,16 @@ if({sE}.target != {sDiv}) {{
             }
         }
 
-#if BRIDGE
-        [Bridge.Template("window.IE_VERSION")]
-#endif
-        private static bool IsRunningOnInternetExplorer()
-        {
-            return false;
-        }
-
-#if BRIDGE
-        [Bridge.Template("true")]
-#endif
-        private static bool IsRunningInJavaScript()
-        {
-            return false;
-        }
-
         protected override Size MeasureOverride(Size availableSize)
         {
-            string uniqueIdentifier = ((INTERNAL_HtmlDomElementReference)this.INTERNAL_OuterDomElement).UniqueIdentifier;
-            Size TextSize = Application.Current.TextMeasurementService.MeasureTextBlock(uniqueIdentifier, Host.TextWrapping, Margin, availableSize.Width);
+            string uniqueIdentifier = ((INTERNAL_HtmlDomElementReference)INTERNAL_OuterDomElement).UniqueIdentifier;
+            Size TextSize = Application.Current.TextMeasurementService.MeasureTextBlock(
+                uniqueIdentifier,
+                Host.TextWrapping == TextWrapping.NoWrap ? "pre" : "pre-wrap",
+                string.Empty,
+                Margin,
+                availableSize.Width,
+                "M");
             return TextSize;
         }
     }

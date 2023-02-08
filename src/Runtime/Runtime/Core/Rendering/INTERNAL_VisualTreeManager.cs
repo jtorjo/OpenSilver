@@ -47,7 +47,7 @@ namespace CSHTML5.Internal
 
         internal static LayoutManagerInternal LayoutManager { get; }
 
-        internal class MeasureQueue
+        internal sealed class MeasureQueue
         {
             private Queue<UIElement> _queue;
 
@@ -95,7 +95,7 @@ namespace CSHTML5.Internal
             }
         }
 
-        internal class LayoutManagerInternal
+        internal sealed class LayoutManagerInternal
         {
             private MeasureQueue _measureQueue;
 
@@ -134,41 +134,72 @@ namespace CSHTML5.Internal
 #if PERFSTAT
             var t = Performance.now();
 #endif
-            if (child != null && IsElementInVisualTree(child)) //todo: doublecheck that "IsElementInVisualTree" is a good thing here.
+            if (child != null)
             {
-                // Verify that the child is really a child of the specified control:
-                if (parent.INTERNAL_VisualChildrenInformation != null
-                    && parent.INTERNAL_VisualChildrenInformation.ContainsKey(child))
+                if (IsElementInVisualTree(child))
                 {
-                    // Remove the element from the DOM:
-                    string stringForDebugging = !IsRunningInJavaScript() ? "Removing " + child.GetType().ToString() : null;
-                    INTERNAL_HtmlDomManager.RemoveFromDom(child.INTERNAL_AdditionalOutsideDivForMargins, stringForDebugging);
+                    // Verify that the child is really a child of the specified control:
+                    if (parent.INTERNAL_VisualChildrenInformation != null
+                        && parent.INTERNAL_VisualChildrenInformation.ContainsKey(child))
+                    {
+                        // Remove the element from the DOM:
+                        string stringForDebugging = !IsRunningInJavaScript() ? "Removing " + child.GetType().ToString() : null;
+                        INTERNAL_HtmlDomManager.RemoveFromDom(child.INTERNAL_AdditionalOutsideDivForMargins, stringForDebugging);
 
-                    // Remove the parent-specific wrapper around the child in the DOM (if any):
-                    var optionalChildWrapper_OuterDomElement = parent.INTERNAL_VisualChildrenInformation[child].INTERNAL_OptionalChildWrapper_OuterDomElement;
-                    if (optionalChildWrapper_OuterDomElement != null)
-                        INTERNAL_HtmlDomManager.RemoveFromDom(optionalChildWrapper_OuterDomElement);
+                        // Remove the parent-specific wrapper around the child in the DOM (if any):
+                        var optionalChildWrapper_OuterDomElement = parent.INTERNAL_VisualChildrenInformation[child].INTERNAL_OptionalChildWrapper_OuterDomElement;
+                        if (optionalChildWrapper_OuterDomElement != null)
+                            INTERNAL_HtmlDomManager.RemoveFromDom(optionalChildWrapper_OuterDomElement);
 
-                    // Remove the element from the parent's children collection:
-                    parent.INTERNAL_VisualChildrenInformation.Remove(child);
+                        // Remove the element from the parent's children collection:
+                        parent.INTERNAL_VisualChildrenInformation.Remove(child);
 
-                    child.INTERNAL_SpanParentCell = null;
+                        //Detach Element  
+                        DetachVisualChidren(child);
 
-                    //Detach Element  
-                    DetachVisualChidren(child);
+                        INTERNAL_WorkaroundIE11IssuesWithScrollViewerInsideGrid.RefreshLayoutIfIE();
 
-
-                    INTERNAL_WorkaroundIE11IssuesWithScrollViewerInsideGrid.RefreshLayoutIfIE();
-
-                    parent.InvalidateMeasure();
-                    parent.InvalidateArrange();
+                        parent.InvalidateMeasure();
+                        parent.InvalidateArrange();
+                    }
+                    else
+                    {
+                        throw new Exception(
+                            string.Format("Cannot detach the element '{0}' because it is not a child of the element '{1}'.",
+                                          child.GetType().ToString(),
+                                          parent.GetType().ToString()));
+                    }
                 }
-                else
+                else if (child.LoadingIsPending)
                 {
-                    throw new Exception(
-                        string.Format("Cannot detach the element '{0}' because it is not a child of the element '{1}'.",
-                                      child.GetType().ToString(),
-                                      parent.GetType().ToString()));
+                    if (parent.INTERNAL_VisualChildrenInformation != null
+                        && parent.INTERNAL_VisualChildrenInformation.ContainsKey(child))
+                    {
+                        // Remove the parent-specific wrapper around the child in the DOM (if any):
+                        var optionalChildWrapper_OuterDomElement = parent.INTERNAL_VisualChildrenInformation[child].INTERNAL_OptionalChildWrapper_OuterDomElement;
+                        if (optionalChildWrapper_OuterDomElement != null)
+                            INTERNAL_HtmlDomManager.RemoveFromDom(optionalChildWrapper_OuterDomElement);
+
+                        // Remove the element from the parent's children collection:
+                        parent.INTERNAL_VisualChildrenInformation.Remove(child);
+
+                        //Detach Element
+                        if (child.INTERNAL_VisualChildrenInformation == null)
+                        {
+                            DetachElement(child);
+                        }
+                        else
+                        {
+                            DetachVisualChidren(child);
+                        }
+                    }
+                    else
+                    {
+                        throw new Exception(
+                            string.Format("Cannot detach the element '{0}' because it is not a child of the element '{1}'.",
+                                          child.GetType().ToString(),
+                                          parent.GetType().ToString()));
+                    }
                 }
             }
 #if PERFSTAT
@@ -176,54 +207,63 @@ namespace CSHTML5.Internal
 #endif
         }
 
-        static void DetachVisualChidren(UIElement element)
+        private static void DetachVisualChidren(UIElement element)
         {
-            Queue<UIElement> elementsQueue = new Queue<UIElement>();
-            elementsQueue.Enqueue(element);
+            var queue = new Queue<UIElement>();
+            queue.Enqueue(element);
 
-            while (elementsQueue.Count > 0)
+            while (queue.Count > 0)
             {
-                var elementToDetach = elementsQueue.Dequeue();
-                if (elementToDetach.INTERNAL_VisualChildrenInformation != null)
+                var e = queue.Dequeue();
+                if (e.INTERNAL_VisualChildrenInformation != null)
                 {
-                    foreach (var pair in elementToDetach.INTERNAL_VisualChildrenInformation)
+                    foreach (var pair in e.INTERNAL_VisualChildrenInformation)
                     {
-                        elementsQueue.Enqueue(pair.Value.INTERNAL_UIElement);
+                        queue.Enqueue(pair.Key);
                     }
                 }
-                DetachElement(elementToDetach);
+
+                DetachElement(e);
             }
         }
 
-        static void DetachElement(UIElement element)
+        private static void DetachElement(UIElement element)
         {
-            if (element.IsPointerOver)
+            if (element.IsConnectedToLiveTree)
             {
-                element.RaiseMouseLeave();
-            }
+                if (element.IsPointerOver)
+                {
+                    element.RaiseMouseLeave();
+                }
 
-            // Call the "OnDetached" of the element. This is particularly useful for elements to clear any references they have to DOM elements. For example, the Grid will use it to set its _tableDiv to null.
-            element.INTERNAL_OnDetachedFromVisualTree();
+                // Call the "OnDetached" of the element. This is particularly useful for elements to
+                // clear any references they have to DOM elements. For example, the Grid will use it
+                // to set its _tableDiv to null.
+                element.INTERNAL_OnDetachedFromVisualTree();
 
-            //We detach the events from the dom element:
-            element.INTERNAL_DetachFromDomEvents();
+                //We detach the events from the dom element:
+                element.INTERNAL_DetachFromDomEvents();
 
-            // Call the "Unloaded" event: (note: in XAML, the "unloaded" event of the parent is called before the "unloaded" event of the children)
-            element._isLoaded = false;
-            if (element is FrameworkElement fe)
-            {
-                // Detach resizeSensor
-                fe.DetachResizeSensorFromDomElement();
+                // Call the "Unloaded" event: (note: in XAML, the "unloaded" event of the parent is called
+                // before the "unloaded" event of the children)
+                element._isLoaded = false;
 
-                // Initialize measure & arrange status
-                fe.ClearMeasureAndArrangeValidation();
+                if (element is FrameworkElement fe)
+                {
+                    // Detach resizeSensor
+                    fe.DetachResizeSensorFromDomElement();
 
-                fe.RaiseUnloadedEvent();
-                fe.UnloadResources();
+                    // Initialize measure & arrange status
+                    fe.ClearMeasureAndArrangeValidation();
+
+                    fe.RaiseUnloadedEvent();
+                    fe.UnloadResources();
+                }
             }
 
             // Reset all visual-tree related information:
             element.IsConnectedToLiveTree = false;
+            element.LoadingIsPending = false;
             element.INTERNAL_OuterDomElement = null;
             element.INTERNAL_InnerDomElement = null;
             element.INTERNAL_VisualChildrenInformation = null;
@@ -231,6 +271,7 @@ namespace CSHTML5.Internal
             element.INTERNAL_DeferredRenderingWhenControlBecomesVisible = null;
             element.INTERNAL_DeferredLoadingWhenControlBecomesVisible = null;
         }
+
         public static void MoveVisualChildInSameParent(UIElement child, UIElement parent, int newIndex, int oldIndex)
         {
             if (oldIndex < 0)
@@ -333,7 +374,7 @@ if(nextSibling != undefined) {
             if (child != null && IsElementInVisualTree(parent))
             {
                 // Ensure that the child is not already attached:
-                if (!child.IsConnectedToLiveTree)
+                if (!child.IsConnectedToLiveTree && !child.LoadingIsPending)
                 {
                     string label = "";
                     if (EnablePerformanceLogging)
@@ -416,12 +457,23 @@ if(nextSibling != undefined) {
 
             object domElementWhereToPlaceChildStuff = (parent.GetDomElementWhereToPlaceChild(child) ?? parent.INTERNAL_InnerDomElement);
 
-            // A "wrapper for child" is sometimes needed between the child and the parent (for example in case of a grid). It is usually one or more DIVs that fit in-between the child and the parent, and that are used to position the child within the parent.
-            object innerDivOfWrapperForChild;
-            object wrapperForChild = parent.CreateDomChildWrapper(domElementWhereToPlaceChildStuff, out innerDivOfWrapperForChild, index);
-            bool comparison1 = (wrapperForChild == null); // Note: we need due to a bug of JSIL where translation fails if we do not use this temp variable.
-            bool comparison2 = (innerDivOfWrapperForChild == null); // Note: we need due to a bug of JSIL where translation fails if we do not use this temp variable.
-            bool doesParentRequireToCreateAWrapperForEachChild = (!comparison1 && !comparison2); // Note: The result is "True" for complex structures such as tables, false otherwise (cf. documentation in "INTERNAL_VisualChildInformation" class).
+            // A "wrapper for child" is sometimes needed between the child and the parent (for example in case of a grid).
+            // It is usually one or more DIVs that fit in-between the child and the parent, and that are used to position
+            // the child within the parent.
+            object wrapperForChild = parent.CreateDomChildWrapper(domElementWhereToPlaceChildStuff, out object innerDivOfWrapperForChild, index);
+            bool doesParentRequireToCreateAWrapperForEachChild = wrapperForChild is not null && innerDivOfWrapperForChild is not null;
+
+            // Remember the information about the "VisualChildren"
+            parent.INTERNAL_VisualChildrenInformation ??= new Dictionary<UIElement, INTERNAL_VisualChildInformation>();
+            parent.INTERNAL_VisualChildrenInformation.Add(child,
+                new INTERNAL_VisualChildInformation()
+                {
+                    INTERNAL_UIElement = child,
+                    INTERNAL_OptionalChildWrapper_OuterDomElement = wrapperForChild,
+                    INTERNAL_OptionalChildWrapper_ChildWrapperInnerDomElement = innerDivOfWrapperForChild
+                });
+
+            child.LoadingIsPending = true;
 
 #if PERFSTAT
             Performance.Counter("VisualTreeManager: Prepare the parent", t0);
@@ -529,23 +581,10 @@ if(nextSibling != undefined) {
 
                 // Create and append the DIV for handling margins and append:
                 additionalOutsideDivForMargins = INTERNAL_HtmlDomManager.CreateDomElementAndAppendIt("div", whereToPlaceDivForMargins, parent, index); //todo: check if the third parameter should be the child or the parent (make something with margins and put a mouseenter in the parent then see if the event is triggered).
-
-                // Style the DIV for handling margins:
                 var style = INTERNAL_HtmlDomManager.GetDomElementStyleForModification(additionalOutsideDivForMargins);
                 style.boxSizing = "border-box";
-                if (child is FrameworkElement &&
-                    (((FrameworkElement)child).HorizontalAlignment == HorizontalAlignment.Stretch && double.IsNaN(((FrameworkElement)child).Width)
-                    && !(child is Image && ((Image)child).Stretch == Stretch.None)))
-                {
-                    if (!containsNegativeMargins)
-                        style.width = "100%";
-                }
-                if (child is FrameworkElement &&
-                    (((FrameworkElement)child).VerticalAlignment == VerticalAlignment.Stretch && double.IsNaN(((FrameworkElement)child).Height)
-                    && !(child is Image && ((Image)child).Stretch == Stretch.None)))
-                {
-                    style.height = "100%";
-                } 
+                style.width = "100%";
+                style.height = "100%";
             }
 
 #if PERFSTAT
@@ -567,6 +606,7 @@ if(nextSibling != undefined) {
                     : domElementWhereToPlaceChildStuff));
 
             child.IsConnectedToLiveTree = true;
+            child.LoadingIsPending = false;
 
             // Set the "ParentWindow" property so that the element knows where to display popups:
             child.INTERNAL_ParentWindow = parent.INTERNAL_ParentWindow;
@@ -626,17 +666,6 @@ if(nextSibling != undefined) {
             child.INTERNAL_InnerDomElement = domElementWhereToPlaceGrandChildren;
             child.INTERNAL_AdditionalOutsideDivForMargins = additionalOutsideDivForMargins ?? outerDomElement;
             child.INTERNAL_InnerDivOfTheChildWrapperOfTheParentIfAny = doesParentRequireToCreateAWrapperForEachChild ? innerDivOfWrapperForChild : null;
-
-            // Remember the information about the "VisualChildren":
-            if (parent.INTERNAL_VisualChildrenInformation == null)
-                parent.INTERNAL_VisualChildrenInformation = new Dictionary<UIElement, INTERNAL_VisualChildInformation>();
-            parent.INTERNAL_VisualChildrenInformation.Add(child,
-                new INTERNAL_VisualChildInformation()
-                {
-                    INTERNAL_UIElement = child,
-                    INTERNAL_OptionalChildWrapper_OuterDomElement = wrapperForChild,
-                    INTERNAL_OptionalChildWrapper_ChildWrapperInnerDomElement = innerDivOfWrapperForChild
-                });
 
 #if PERFSTAT
             Performance.Counter("VisualTreeManager: Remember all info for future use", t3);
@@ -727,12 +756,10 @@ if(nextSibling != undefined) {
             // Int32.MaxValue). At the time when this code was written, there was no way to automatically call the "OnChanged"
             // on a dependency property if no value was set.
 
-            if (isChildAControl)
+            if (isChildAControl && child is not TextBlock)
             {
-                if (!(child is TextBlock)) // TextBlock should not count in tabbing (TextBlock is not supposed to be a Control).
-                {
-                    Control.TabIndexProperty_MethodToUpdateDom(child, ((Control)child).TabIndex);
-                }
+                Control c = (Control)child;
+                c.UpdateTabIndex(c.IsTabStop, c.TabIndex);
             }
 
             //--------------------------------------------------------
@@ -860,6 +887,19 @@ if(nextSibling != undefined) {
                         propertyMetadata.MethodToUpdateDom(storage.Owner, value);
                     }
 
+                    if (propertyMetadata.MethodToUpdateDom2 != null)
+                    {
+                        if (!valueWasRetrieved)
+                        {
+                            value = INTERNAL_PropertyStore.GetEffectiveValue(storage.Entry);
+                            valueWasRetrieved = true;
+                        }
+
+                        // DependencyProperty.UnsetValue for the old value signify that
+                        // the old value should be ignored.
+                        propertyMetadata.MethodToUpdateDom2(storage.Owner, DependencyProperty.UnsetValue, value);
+                    }
+
                     //--------------------------------------------------
                     // Call PropertyChanged
                     //--------------------------------------------------
@@ -901,13 +941,14 @@ if(nextSibling != undefined) {
         /// <returns>The first child of the specified type.</returns>
         public static T GetChildOfType<T>(UIElement parent) where T : UIElement
         {
-            if (parent == null || parent.INTERNAL_VisualChildrenInformation == null)
+            if (parent == null)
                 return null;
 
-            foreach (var childInfo in parent.INTERNAL_VisualChildrenInformation.Select(x => x.Value))
+            int childrenCount = VisualTreeHelper.GetChildrenCount(parent);
+            for (int i = 0; i < childrenCount; i++)
             {
-                var child = childInfo.INTERNAL_UIElement;
-                var result = (child as T) ?? GetChildOfType<T>(child);
+                var child = VisualTreeHelper.GetChild(parent, i) as UIElement;
+                var result = child as T ?? GetChildOfType<T>(child);
                 if (result != null)
                     return result;
             }

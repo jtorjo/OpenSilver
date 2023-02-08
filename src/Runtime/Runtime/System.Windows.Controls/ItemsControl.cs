@@ -22,6 +22,7 @@ using System.Windows.Markup;
 using System.Diagnostics;
 using CSHTML5.Internals.Controls;
 using OpenSilver.Internal.Xaml.Context;
+using OpenSilver.Internal;
 
 #if MIGRATION
 using System.Windows.Controls.Primitives;
@@ -901,9 +902,8 @@ namespace Windows.UI.Xaml.Controls
         public static ItemsControl GetItemsOwner(DependencyObject element)
         {
             ItemsControl container = null;
-            Panel panel = element as Panel;
 
-            if (panel != null && panel.IsItemsHost)
+            if (element is Panel panel && panel.IsItemsHost)
             {
                 // see if element was generated for an ItemsPresenter
                 ItemsPresenter ip = ItemsPresenter.FromPanel(panel);
@@ -913,11 +913,6 @@ namespace Windows.UI.Xaml.Controls
                     // if so use the element whose style begat the ItemsPresenter
                     container = ip.Owner;
                 }
-                //else
-                //{
-                //    // otherwise use element's templated parent
-                //    container = panel.TemplatedParent as ItemsControl;
-                //}
             }
 
             return container;
@@ -972,7 +967,7 @@ namespace Windows.UI.Xaml.Controls
         /// be useful for example to replace the rendering with a custom 
         /// HTML-based one.
         /// </summary>
-        [Obsolete("Disabling default rendering is not supported anymore.")]
+        [Obsolete(Helper.ObsoleteMemberMessage)]
         protected void DisableDefaultRendering()
         {
         }
@@ -988,13 +983,13 @@ namespace Windows.UI.Xaml.Controls
         /// correct type, otherwise it returns null if no container is to be 
         /// created, or it returns the new container otherwise.
         /// </returns>
-        [Obsolete]
+        [Obsolete(Helper.ObsoleteMemberMessage)]
         protected virtual SelectorItem INTERNAL_GenerateContainer(object item)
         {
             return (SelectorItem)this.GetContainerFromItem(item);
         }
 
-        [Obsolete]
+        [Obsolete(Helper.ObsoleteMemberMessage)]
         protected virtual void OnChildItemRemoved(object item)
         {
             // This is intented to be overridden by the controls that have 
@@ -1002,7 +997,7 @@ namespace Windows.UI.Xaml.Controls
             // in case that the element is removed.
         }
 
-        [Obsolete]
+        [Obsolete(Helper.ObsoleteMemberMessage)]
         protected FrameworkElement GenerateFrameworkElementToRenderTheItem(object item)
         {
             //---------------------------------------------------
@@ -1047,7 +1042,7 @@ namespace Windows.UI.Xaml.Controls
         /// <returns>
         /// The element that is used to display the given item.
         /// </returns>
-        [Obsolete]
+        [Obsolete(Helper.ObsoleteMemberMessage)]
         protected virtual DependencyObject GetContainerFromItem(object item)
         {
             return null;

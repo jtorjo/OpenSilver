@@ -29,6 +29,7 @@ using OpenSilver.Internal.Xaml;
 using System.Text.Json;
 using System.Collections.ObjectModel;
 using System.Diagnostics;
+using System.Xaml.Markup;
 
 #if MIGRATION
 using System.ApplicationModel.Activation;
@@ -58,7 +59,7 @@ namespace Windows.UI.Xaml
         private ApplicationLifetimeObjectsCollection lifetime_objects;
         private Window _mainWindow;
         private ResourceDictionary _resources;
-        private Dictionary<Type, Style> _implicitStylesCache;
+        private Dictionary<object, object> _implicitResourcesCache;
 
         // Says if App.Resources has any implicit styles
         internal bool HasImplicitStylesInResources { get; set; }        
@@ -114,13 +115,6 @@ namespace Windows.UI.Xaml
                 Window.Current = _mainWindow;
                 object applicationRootDomElement = INTERNAL_HtmlDomManager.GetApplicationRootDomElement();
                 _mainWindow.AttachToDomElement(applicationRootDomElement);
-
-                // Listen to clicks anywhere in the window (this is used to close the popups that are not supposed to stay open):
-#if MIGRATION
-                _mainWindow.AddHandler(UIElement.MouseLeftButtonDownEvent, new MouseButtonEventHandler(INTERNAL_PopupsManager.OnClickOnPopupOrWindow), true);
-#else
-                _mainWindow.AddHandler(UIElement.PointerPressedEvent, new PointerEventHandler(INTERNAL_PopupsManager.OnClickOnPopupOrWindow), true);
-#endif
 
 #if !CSHTML5NETSTANDARD
                 // Workaround an issue on Firefox where the UI disappears if the window is resized and on some other occasions:
@@ -287,6 +281,7 @@ namespace Windows.UI.Xaml
         /// Gets a collection of application-scoped resources, such as styles, templates,
         /// and brushes.
         /// </summary>
+        [Ambient]
         public ResourceDictionary Resources
         {
             get
@@ -338,28 +333,11 @@ namespace Windows.UI.Xaml
             }
         }
 
-        //
-        // Internal routine only look up in application resources
-        //
-        internal object FindResourceInternal(object resourceKey)
+        internal object FindImplicitResourceInternal(object resourceKey)
         {
-            ResourceDictionary resources = _resources;
-
-            if (resources == null)
+            if (_implicitResourcesCache?.TryGetValue(resourceKey, out object resource) ?? false)
             {
-                return null;
-            }
-            else
-            {
-                return resources[resourceKey];
-            }
-        }
-
-        internal Style FindStyleResourceInternal(Type resourceKey)
-        {
-            if (_implicitStylesCache?.TryGetValue(resourceKey, out Style style) ?? false)
-            {
-                return style;
+                return resource;
             }
 
             return null;
@@ -367,30 +345,32 @@ namespace Windows.UI.Xaml
 
         internal void InvalidateStyleCache(ResourcesChangeInfo info)
         {
-            if (info.Key is Type type)
+            if (info.Key is not null)
             {
-                Style newStyle = (Style)Resources[type];
-                if (newStyle is null)
+                switch (info.Key)
                 {
-                    _implicitStylesCache?.Remove(type);
-                }
-                else
-                {
-                    _implicitStylesCache ??= new();
-                    _implicitStylesCache[type] = newStyle;
+                    case Type:
+                    case DataTemplateKey:
+                        object resource = Resources[info.Key];
+                        if (resource is null)
+                        {
+                            _implicitResourcesCache?.Remove(info.Key);
+                        }
+                        else
+                        {
+                            _implicitResourcesCache ??= new();
+                            _implicitResourcesCache[info.Key] = resource;
+                        }
+                        break;
                 }
             }
             else if (info.IsCatastrophicDictionaryChange ||
-                (info.NewDictionary != null && info.NewDictionary.HasImplicitStyles) ||
-                (info.OldDictionary != null && info.OldDictionary.HasImplicitStyles))
+                (info.NewDictionary != null && (info.NewDictionary.HasImplicitStyles || info.NewDictionary.HasImplicitDataTemplates)) ||
+                (info.OldDictionary != null && (info.OldDictionary.HasImplicitStyles || info.OldDictionary.HasImplicitDataTemplates)))
             {
-                _implicitStylesCache = HasResources && Resources.HasImplicitStyles ?
-                    ResourceDictionary.Helpers.BuildImplicitStylesCache(Resources) :
+                _implicitResourcesCache = HasResources && (Resources.HasImplicitStyles || Resources.HasImplicitDataTemplates) ?
+                    ResourceDictionary.Helpers.BuildImplicitResourcesCache(Resources) :
                     null;
-            }
-            else
-            {
-                Debug.Assert(false, "Unexpected resource update !");
             }
         }
 

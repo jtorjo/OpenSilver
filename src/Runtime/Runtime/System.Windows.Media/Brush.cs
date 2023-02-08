@@ -13,7 +13,16 @@
 
 using System;
 using System.Collections.Generic;
+using System.Linq;
+using System.Threading.Tasks;
 using CSHTML5.Internal;
+using OpenSilver.Internal;
+
+#if MIGRATION
+using System.Windows.Controls;
+#else
+using Windows.UI.Xaml.Controls;
+#endif
 
 #if MIGRATION
 namespace System.Windows.Media
@@ -25,7 +34,11 @@ namespace Windows.UI.Xaml.Media
     /// Defines objects used to paint graphical objects. Classes that derive from
     /// Brush describe how the area is painted.
     /// </summary>
-    public partial class Brush : DependencyObject, IHasAccessToPropertiesWhereItIsUsed
+    public partial class Brush : DependencyObject,
+        IHasAccessToPropertiesWhereItIsUsed2,
+#pragma warning disable CS0618 // Type or member is obsolete
+        IHasAccessToPropertiesWhereItIsUsed
+#pragma warning restore CS0618 // Type or member is obsolete
     {
         internal static Brush Parse(string source)
         {
@@ -49,112 +62,116 @@ namespace Windows.UI.Xaml.Media
         public static readonly DependencyProperty OpacityProperty =
             DependencyProperty.Register("Opacity", typeof(double), typeof(Brush), new PropertyMetadata(1d));
 
-        private HashSet<KeyValuePair<DependencyObject, DependencyProperty>> _propertiesWhereUsed;
+        private HashSet<KeyValuePair<DependencyObject, DependencyProperty>> _propertiesWhereUsedObsolete;
+
+        [Obsolete(Helper.ObsoleteMemberMessage)]
         public HashSet<KeyValuePair<DependencyObject, DependencyProperty>> PropertiesWhereUsed
+                => _propertiesWhereUsedObsolete ??= new();
+
+        private Dictionary<WeakDependencyObjectWrapper, HashSet<DependencyProperty>> _propertiesWhereUsed;
+
+        Dictionary<WeakDependencyObjectWrapper, HashSet<DependencyProperty>> IHasAccessToPropertiesWhereItIsUsed2.PropertiesWhereUsed
+            => _propertiesWhereUsed ??= new();
+
+        internal static List<CSSEquivalent> MergeCSSEquivalentsOfTheParentsProperties(
+            IHasAccessToPropertiesWhereItIsUsed2 brush,
+            Func<CSSEquivalent, ValueToHtmlConverter> parentPropertyToValueToHtmlConverter) // note: "CSSEquivalent" here stands for the CSSEquicalent of the parent property.
         {
-            get
+            var result = new List<CSSEquivalent>();
+            foreach (var item in brush.PropertiesWhereUsed.ToArray())
             {
-                if(_propertiesWhereUsed == null)
+                if (!item.Key.TryGetDependencyObject(out DependencyObject dependencyObject))
                 {
-                    _propertiesWhereUsed = new HashSet<KeyValuePair<DependencyObject, DependencyProperty>>();
+                    brush.PropertiesWhereUsed.Remove(item.Key);
+                    continue;
                 }
-                return _propertiesWhereUsed;
-            }
-        }
 
-        internal static List<CSSEquivalent> MergeCSSEquivalentsOfTheParentsProperties(Brush brush, Func<CSSEquivalent, ValueToHtmlConverter> parentPropertyToValueToHtmlConverter) // note: "CSSEquivalent" here stands for the CSSEquicalent of the parent property.
-        {
-            List<CSSEquivalent> result = new List<CSSEquivalent>();
-            //We copy brush.PropertiesWhereUsed in a local variable because we need to modify it in the foreach:
-            HashSet<KeyValuePair<DependencyObject, DependencyProperty>> propertiesWhereUsed = new HashSet<KeyValuePair<DependencyObject, DependencyProperty>>();
-            foreach (KeyValuePair<DependencyObject, DependencyProperty> tuple in brush.PropertiesWhereUsed)
-            {
-                propertiesWhereUsed.Add(tuple);
-            }
-
-            foreach (KeyValuePair<DependencyObject, DependencyProperty> tuple in propertiesWhereUsed)
-            {
-                UIElement uiElement = tuple.Key as UIElement;
-                DependencyProperty dependencyProperty = tuple.Value;
-                if (uiElement != null)
+                if (dependencyObject is not UIElement uiElement)
                 {
-                    if (!INTERNAL_VisualTreeManager.IsElementInVisualTree(uiElement))
-                    {
-                        brush.PropertiesWhereUsed.Remove(tuple);
-                    }
-                    else
-                    {
-                        PropertyMetadata propertyMetadata = dependencyProperty.GetTypeMetaData(uiElement.GetType());
-                        if (propertyMetadata.GetCSSEquivalent != null) // If the parent has a CSSEquivalent, we use it, otherwise we use the parent PropertyChanged method.
-                        {
-                            var parentPropertyCSSEquivalent = propertyMetadata.GetCSSEquivalent(uiElement);
-                            if (parentPropertyCSSEquivalent != null)
-                            {
-                                CSSEquivalent newCSSEquivalent = new CSSEquivalent()
-                                {
-                                    Name = parentPropertyCSSEquivalent.Name,
-                                    ApplyAlsoWhenThereIsAControlTemplate = parentPropertyCSSEquivalent.ApplyAlsoWhenThereIsAControlTemplate,
+                    continue;
+                }
 
-                                    Value = parentPropertyToValueToHtmlConverter(parentPropertyCSSEquivalent),
-                                    DomElement = parentPropertyCSSEquivalent.DomElement,
-                                    UIElement = uiElement
-                                };
-                                if (newCSSEquivalent.DomElement == null)
-                                {
-                                    newCSSEquivalent.DomElement = uiElement.INTERNAL_OuterDomElement;
-                                }
-                                result.Add(newCSSEquivalent);
-                            }
-                        }
-                        else if (propertyMetadata.GetCSSEquivalents != null)
-                        {
-                            var parentPropertyCSSEquivalents = propertyMetadata.GetCSSEquivalents(uiElement);
-                            foreach (var parentPropertyCSSEquivalent in parentPropertyCSSEquivalents)
-                            {
-                                if (parentPropertyCSSEquivalent != null)
-                                {
-                                    CSSEquivalent newCSSEquivalent = new CSSEquivalent()
-                                    {
-                                        Name = parentPropertyCSSEquivalent.Name,
-                                        ApplyAlsoWhenThereIsAControlTemplate = parentPropertyCSSEquivalent.ApplyAlsoWhenThereIsAControlTemplate,
+                if (!INTERNAL_VisualTreeManager.IsElementInVisualTree(uiElement))
+                {
+                    brush.PropertiesWhereUsed.Remove(item.Key);
+                    continue;
+                }
 
-                                        Value = parentPropertyToValueToHtmlConverter(parentPropertyCSSEquivalent),
-                                        DomElement = parentPropertyCSSEquivalent.DomElement,
-                                        UIElement = uiElement
-                                    };
-                                    if (newCSSEquivalent.DomElement == null)
-                                    {
-                                        newCSSEquivalent.DomElement = uiElement.INTERNAL_OuterDomElement;
-                                    }
-                                    result.Add(newCSSEquivalent);
-                                }
-                            }
+                foreach (var dependencyProperty in item.Value)
+                {
+                    var parentCssEquivalents = new List<CSSEquivalent>();
+                    if (dependencyProperty == Border.BorderBrushProperty)
+                    {
+                        if (brush is LinearGradientBrush)
+                        {
+                            parentCssEquivalents.Add(new CSSEquivalent
+                            {
+                                Name = new List<string>(1) { "border-image-source" },
+                            });
+                            parentCssEquivalents.Add(new CSSEquivalent
+                            {
+                                Name = new List<string>(1) { "border-image-slice" },
+                                Value = (d, value) => { return "1"; },
+                            });
                         }
                         else
                         {
-                            //we want to create a CSSEquivalent that will just make the UIElement call the property callback if any:
-                            if (propertyMetadata.PropertyChangedCallback != null)
+                            parentCssEquivalents.Add(new CSSEquivalent
                             {
-                                result.Add(new CSSEquivalent()
-                                {
-                                    UIElement = uiElement,
-                                    CallbackMethod = propertyMetadata.PropertyChangedCallback,
-                                    DependencyProperty = dependencyProperty
-                                });
-                            }
+                                Name = new List<string>(1) { "borderColor" },
+                                Value = (inst, value) => value ?? "transparent"
+                            });
                         }
                     }
-                }
-                else
-                {
-                    //Commented because it could be a Setter in a Style
-                    //throw new NotSupportedException("A solidColorBrush cannot currently be set inside a class that desn't inherit from UIElement.");
+                    else if (dependencyProperty == Border.BackgroundProperty ||
+                        dependencyProperty == Panel.BackgroundProperty ||
+                        dependencyProperty == Control.BackgroundProperty)
+                    {
+                        parentCssEquivalents.Add(new CSSEquivalent
+                        {
+                            Name = new List<string>(3) { "background", "backgroundColor", "backgroundColorAlpha" },
+                        });
+                    }
+                    else if (dependencyProperty == Control.ForegroundProperty)
+                    {
+                        parentCssEquivalents.Add(new CSSEquivalent
+                        {
+                            Name = new List<string>(2) { "color", "colorAlpha" },
+                            ApplyAlsoWhenThereIsAControlTemplate = true,
+                        });
+                    }
+                    else
+                    {
+                        parentCssEquivalents.Add(new()
+                        {
+                            UIElement = uiElement,
+                            CallbackMethod = dependencyProperty.GetMetadata(uiElement.GetType()).PropertyChangedCallback,
+                            DependencyProperty = dependencyProperty
+                        });
+                    }
+
+                    foreach (var cssEquivalent in parentCssEquivalents)
+                    {
+                        result.Add(new()
+                        {
+                            Name = cssEquivalent.Name,
+                            ApplyAlsoWhenThereIsAControlTemplate = cssEquivalent.ApplyAlsoWhenThereIsAControlTemplate,
+                            Value = parentPropertyToValueToHtmlConverter(cssEquivalent),
+                            DomElement = cssEquivalent.DomElement ?? uiElement.INTERNAL_OuterDomElement,
+                            UIElement = uiElement,
+                            DependencyProperty = cssEquivalent.DependencyProperty,
+                            CallbackMethod = cssEquivalent.CallbackMethod,
+                        });
+                    }
                 }
             }
             return result;
         }
 
-        #region Transform, RelativeTransform (Not supported yet)
+        internal virtual Task<string> GetDataStringAsync(UIElement parent)
+            => Task.FromResult(string.Empty);
+
+#region Transform, RelativeTransform (Not supported yet)
         /// <summary>Identifies the <see cref="P:System.Windows.Media.Brush.RelativeTransform" /> dependency property. </summary>
         /// <returns>The <see cref="P:System.Windows.Media.Brush.RelativeTransform" /> dependency property identifier.</returns>
         [OpenSilver.NotImplemented]
@@ -181,6 +198,6 @@ namespace Windows.UI.Xaml.Media
             get { return (Transform)GetValue(TransformProperty); }
             set { SetValue(TransformProperty, value); }
         }
-        #endregion
+#endregion
     }
 }

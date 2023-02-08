@@ -19,6 +19,7 @@ using System.Collections.ObjectModel;
 using System.Globalization;
 using System.Linq;
 using System.Windows.Input;
+using System.ComponentModel;
 
 #if MIGRATION
 using System.Windows.Media;
@@ -82,7 +83,7 @@ namespace Windows.UI.Xaml.Controls
         /// <summary>
         /// Derived classes can set this flag in their constructor to prevent the "Template" property from being applied.
         /// </summary>
-        [Obsolete("This value is ignored. ControlTemplate is always applied.")]
+        [Obsolete(Helper.ObsoleteMemberMessage)]
         protected bool INTERNAL_DoNotApplyControlTemplate = false;
 
         /// <summary>
@@ -105,9 +106,9 @@ namespace Windows.UI.Xaml.Controls
             UpdateVisualStates();
         }
 
-        internal override NativeEventsManager CreateEventsManager()
+        internal override void AddEventListeners()
         {
-            return new NativeEventsManager(this, this, this, true);
+            NativeEventsHelper.AddEventListeners(this, true);
         }
 
         //-----------------------
@@ -132,15 +133,17 @@ namespace Windows.UI.Xaml.Controls
                 typeof(Control), 
                 new PropertyMetadata((object)null)
                 {
-                    GetCSSEquivalent = (instance) => new CSSEquivalent
-                    {
-                        Name = new List<string> { "background", "backgroundColor", "backgroundColorAlpha" },
-                    },
-                    MethodToUpdateDom = (d, e) =>
-                    {
-                        UIElement.SetPointerEvents((Control)d);
-                    },
+                    MethodToUpdateDom2 = UpdateDomOnBackgroundChanged,
                 });
+
+        private static void UpdateDomOnBackgroundChanged(DependencyObject d, object oldValue, object newValue)
+        {
+            var control = (Control)d;
+            if (!control.HasTemplate)
+            {
+                _ = Panel.RenderBackgroundAsync(control, (Brush)newValue);
+            }
+        }
 
         internal bool INTERNAL_IsLegacyVisualStates
         {
@@ -232,7 +235,7 @@ namespace Windows.UI.Xaml.Controls
                     Inherits = true,
                     GetCSSEquivalent = (instance) => new CSSEquivalent
                     {
-                        Value = (inst, value) => ((FontWeight)value).Weight.ToInvariantString(),
+                        Value = (inst, value) => ((FontWeight)value).ToOpenTypeWeight().ToInvariantString(),
                         Name = new List<string> { "fontWeight" },
                         ApplyAlsoWhenThereIsAControlTemplate = true // (See comment where this property is defined)
                     }
@@ -295,12 +298,29 @@ namespace Windows.UI.Xaml.Controls
                 typeof(Control), 
                 new PropertyMetadata(new SolidColorBrush(Colors.Black))
                 {
-                    GetCSSEquivalent = (instance) => new CSSEquivalent
-                    {
-                        Name = new List<string> { "color", "colorAlpha" },
-                        ApplyAlsoWhenThereIsAControlTemplate = true // (See comment where this property is defined)
-                    }
+                    MethodToUpdateDom2 = UpdateDomOnForegroundChanged,
                 });
+
+        private static void UpdateDomOnForegroundChanged(DependencyObject d, object oldValue, object newValue)
+        {
+            var control = (Control)d;
+            var cssStyle = INTERNAL_HtmlDomManager.GetFrameworkElementOuterStyleForModification(control);
+            switch (newValue)
+            {
+                case SolidColorBrush solid:
+                    cssStyle.color = solid.INTERNAL_ToHtmlString();
+                    break;
+
+                case null:
+                    cssStyle.color = string.Empty;
+                    break;
+
+                default:
+                    // GradientBrush, ImageBrush and custom brushes are not supported.
+                    // Keep using old brush.
+                    break;
+            }
+        }
 
         //-----------------------
         // FONTFAMILY
@@ -363,17 +383,7 @@ namespace Windows.UI.Xaml.Controls
                     {
                         Value = (inst, value) =>
                         {
-#if GD_WIP
-                            if (value is Binding binding)
-                            {
-                                value = binding.Source;
-                                binding.Path.Path.Split('.')
-                                    .ForEach(p =>
-                                        value = value.GetType().GetProperty(p).GetValue(value)
-                                    );
-                            }
-
-#endif                      // Note: We multiply by 1000 and then divide by 1000 so as to only keep 3 
+                            // Note: We multiply by 1000 and then divide by 1000 so as to only keep 3 
                             // decimals at the most.
                             return (Math.Floor(Convert.ToDouble(value) * 1000) / 1000).ToInvariantString() + "px"; 
                         },
@@ -404,19 +414,14 @@ namespace Windows.UI.Xaml.Controls
                 nameof(TextDecorations),
                 typeof(TextDecorationCollection),
                 typeof(Control),
-                new FrameworkPropertyMetadata((object)null, FrameworkPropertyMetadataOptions.AffectsMeasure)
+                new FrameworkPropertyMetadata(null)
                 {
-                    GetCSSEquivalent = INTERNAL_GetCSSEquivalentForTextDecorations,
+                    MethodToUpdateDom = static (d, newValue) =>
+                    {
+                        var domStyle = INTERNAL_HtmlDomManager.GetDomElementStyleForModification(((Control)d).INTERNAL_OuterDomElement);
+                        domStyle.textDecoration = ((TextDecorationCollection)newValue)?.ToHtmlString() ?? string.Empty;
+                    },
                 });
-
-        internal static CSSEquivalent INTERNAL_GetCSSEquivalentForTextDecorations(DependencyObject instance)
-        {
-            return new CSSEquivalent
-            {
-                Value = (inst, value) => ((TextDecorationCollection)value)?.ToHtmlString() ?? string.Empty,
-                Name = new List<string>(1) { "textDecoration" },
-            };
-        }
 #else
         /// <summary>
         /// Gets or sets the text decorations (underline, strikethrough...).
@@ -437,50 +442,26 @@ namespace Windows.UI.Xaml.Controls
                 typeof(Control), 
                 new PropertyMetadata((object)null)
                 {
-                    GetCSSEquivalent = INTERNAL_GetCSSEquivalentForTextDecorations,
-                });
-
-        internal static CSSEquivalent INTERNAL_GetCSSEquivalentForTextDecorations(DependencyObject instance)
-        {
-            return new CSSEquivalent
-            {
-                Value = (inst, value) =>
-                {
-#if BRIDGE
-                    if (value != null) //todo: remove this line when Bridge.NET no longer raises exception on the following lines (cf. styles kit v1.1)
+                    MethodToUpdateDom = static (d, newValue) =>
                     {
-#endif
-                        TextDecorations? newTextDecoration = (TextDecorations?)value;
+                        var domStyle = INTERNAL_HtmlDomManager.GetDomElementStyleForModification(((Control)d).INTERNAL_OuterDomElement);
+                        var newTextDecoration = (TextDecorations?)newValue;
                         if (newTextDecoration.HasValue)
                         {
-                            switch (newTextDecoration)
+                            domStyle.textDecoration = newTextDecoration switch
                             {
-                                case Windows.UI.Text.TextDecorations.OverLine:
-                                    return "overline";
-                                case Windows.UI.Text.TextDecorations.Strikethrough:
-                                    return "line-through";
-                                case Windows.UI.Text.TextDecorations.Underline:
-                                    return "underline";
-                                case Windows.UI.Text.TextDecorations.None:
-                                default:
-                                    return ""; // Note: this will reset the value.
-                            }
+                                Text.TextDecorations.OverLine => "overline",
+                                Text.TextDecorations.Strikethrough => "line-through",
+                                Text.TextDecorations.Underline => "underline",
+                                _ => "",
+                            };
                         }
                         else
                         {
-                            return "";
+                            domStyle.textDecoration = "";
                         }
-#if BRIDGE
-                    }
-                    else
-                    {
-                        return "";
-                    }
-#endif
-                },
-                Name = new List<string> { "textDecoration" },
-            };
-        }
+                    },
+                });
 #endif
 
         //-----------------------
@@ -497,37 +478,34 @@ namespace Windows.UI.Xaml.Controls
         }
 
         /// <summary>
-        /// Identifies the <see cref="Control.Padding"/> dependency property.
+        /// Identifies the <see cref="Padding"/> dependency property.
         /// </summary>
         public static readonly DependencyProperty PaddingProperty =
             DependencyProperty.Register(
-                nameof(Padding), 
-                typeof(Thickness), 
+                nameof(Padding),
+                typeof(Thickness),
                 typeof(Control),
                 new FrameworkPropertyMetadata(new Thickness(), FrameworkPropertyMetadataOptions.AffectsMeasure)
-                { 
-                    MethodToUpdateDom = Padding_MethodToUpdateDom,
-                });
-
-        private static void Padding_MethodToUpdateDom(DependencyObject d, object newValue)
-        {
-            var control = (Control)d;
-            // if the parent is a canvas, we ignore this property and we want to ignore this
-            // property if there is a ControlTemplate on this control.
-            if (!(control.INTERNAL_VisualParent is Canvas) && !control.HasTemplate && !control.IsUnderCustomLayout) 
-            {
-                var innerDomElement = control.INTERNAL_InnerDomElement;
-                if (innerDomElement != null)
                 {
-                    var styleOfInnerDomElement = INTERNAL_HtmlDomManager.GetDomElementStyleForModification(innerDomElement);
-                    Thickness newPadding = (Thickness)newValue;
-                    
-                    // todo: if the container has a padding, add it to the margin
-                    styleOfInnerDomElement.boxSizing = "border-box";
-                    styleOfInnerDomElement.padding = $"{newPadding.Top.ToString(CultureInfo.InvariantCulture)}px {newPadding.Right.ToString(CultureInfo.InvariantCulture)}px {newPadding.Bottom.ToString(CultureInfo.InvariantCulture)}px {newPadding.Left.ToString(CultureInfo.InvariantCulture)}px";
-                }
-            }
-        }
+                    MethodToUpdateDom = static (d, newValue) =>
+                    {
+                        var control = (Control)d;
+                        // if the parent is a canvas, we ignore this property and we want to ignore this
+                        // property if there is a ControlTemplate on this control.
+                        if (control.INTERNAL_InnerDomElement != null && 
+                            !control.HasTemplate && 
+                            control.INTERNAL_VisualParent is not Canvas && 
+                            !control.IsUnderCustomLayout)
+                        {
+                            var domStyle = INTERNAL_HtmlDomManager.GetDomElementStyleForModification(control.INTERNAL_InnerDomElement);
+                            Thickness padding = (Thickness)newValue;
+
+                            // todo: if the container has a padding, add it to the margin
+                            domStyle.boxSizing = "border-box";
+                            domStyle.padding = $"{padding.Top.ToInvariantString()}px {padding.Right.ToInvariantString()}px {padding.Bottom.ToInvariantString()}px {padding.Left.ToInvariantString()}px";
+                        }
+                    },
+                });
 
         //-----------------------
         // HORIZONTALCONTENTALIGNMENT
@@ -543,14 +521,14 @@ namespace Windows.UI.Xaml.Controls
         }
 
         /// <summary>
-        /// Identifies the <see cref="Control.HorizontalContentAlignment"/> dependency property.
+        /// Identifies the <see cref="HorizontalContentAlignment"/> dependency property.
         /// </summary>
         public static readonly DependencyProperty HorizontalContentAlignmentProperty =
             DependencyProperty.Register(
                 nameof(HorizontalContentAlignment), 
                 typeof(HorizontalAlignment), 
                 typeof(Control),
-                new FrameworkPropertyMetadata(HorizontalAlignment.Center, FrameworkPropertyMetadataOptions.AffectsMeasure | FrameworkPropertyMetadataOptions.AffectsArrange));
+                new FrameworkPropertyMetadata(HorizontalAlignment.Center, FrameworkPropertyMetadataOptions.AffectsArrange));
 
         //-----------------------
         // VERTICALCONTENTALIGNMENT
@@ -566,14 +544,14 @@ namespace Windows.UI.Xaml.Controls
         }
 
         /// <summary>
-        /// Identifies the <see cref="Control.VerticalContentAlignment"/> dependency property.
+        /// Identifies the <see cref="VerticalContentAlignment"/> dependency property.
         /// </summary>
         public static readonly DependencyProperty VerticalContentAlignmentProperty =
             DependencyProperty.Register(
                 nameof(VerticalContentAlignment), 
                 typeof(VerticalAlignment), 
                 typeof(Control),
-                new FrameworkPropertyMetadata(VerticalAlignment.Center, FrameworkPropertyMetadataOptions.AffectsMeasure | FrameworkPropertyMetadataOptions.AffectsArrange));
+                new FrameworkPropertyMetadata(VerticalAlignment.Center, FrameworkPropertyMetadataOptions.AffectsArrange));
 
         //-----------------------
         // TABINDEX
@@ -591,7 +569,7 @@ namespace Windows.UI.Xaml.Controls
         }
 
         /// <summary>
-        /// Identifies the <see cref="Control.TabIndex"/> dependency property.
+        /// Identifies the <see cref="TabIndex"/> dependency property.
         /// </summary>
         public static readonly DependencyProperty TabIndexProperty =
             DependencyProperty.Register(
@@ -600,12 +578,15 @@ namespace Windows.UI.Xaml.Controls
                 typeof(Control), 
                 new PropertyMetadata(int.MaxValue)
                 {
-                    MethodToUpdateDom = TabIndexProperty_MethodToUpdateDom,
+                    MethodToUpdateDom = static (d, newValue) =>
+                    {
+                        var control = (Control)d;
+                        control.UpdateTabIndex(control.IsTabStop, (int)newValue);
+                    },
                 });
 
         private const int TABINDEX_BROWSER_MAX_VALUE = 32767;
 
-        internal virtual bool INTERNAL_GetFocusInBrowser => false;
         internal virtual void UpdateTabIndex(bool isTabStop, int tabIndex)
         {
             var domElementConcernedByFocus = GetFocusTarget();
@@ -613,16 +594,12 @@ namespace Windows.UI.Xaml.Controls
                 return;
             if (!isTabStop || !this.IsEnabled)
             {
-                this.PreventFocusEvents();
-                INTERNAL_HtmlDomManager.SetDomElementAttribute(domElementConcernedByFocus, "tabIndex", this.INTERNAL_GetFocusInBrowser ? "-1" : string.Empty);
+                INTERNAL_HtmlDomManager.SetDomElementAttribute(domElementConcernedByFocus, "tabIndex", "-1");
             }
             else
             {
                 //Note: according to W3C, tabIndex needs to be between 0 and 32767 on browsers: https://www.w3.org/TR/html401/interact/forms.html#adef-tabindex
                 //      also, the behaviour of the different browsers outside of these values can be different and therefore, we have to restrict the values.
-
-                this.AllowFocusEvents();
-
                 //We translate the TabIndexes to have a little margin with negative TabIndexes:
                 //this is because a negative tabIndex in html is equivalent to IsTabStop = false in CS.
                 //this way, we make sure to keep the order of elements with TabIndexes between -100 and TABINDEX_BROWSER_MAX_VALUE - 100
@@ -641,7 +618,9 @@ namespace Windows.UI.Xaml.Controls
 
                 //in the case where the control should not have an outline even when focused or when the control has a template that defines the VisualState "Focused", we remove the default outline that browsers put:
                 IList<VisualStateGroup> groups = this.StateGroupsRoot?.GetValue(VisualStateManager.VisualStateGroupsProperty) as Collection<VisualStateGroup>;
+#pragma warning disable CS0618 // Type or member is obsolete
                 if (!this.UseSystemFocusVisuals ||
+#pragma warning restore CS0618 // Type or member is obsolete
                     (groups != null && groups.Any(gr => ((IList<VisualState>)gr.States).Any(state => state.Name == "Focused"))))
                 {
 
@@ -649,18 +628,6 @@ namespace Windows.UI.Xaml.Controls
                     INTERNAL_HtmlDomManager.SetDomElementStyleProperty(domElementConcernedByFocus, new List<string>() { "outline" }, "none");
                 }
             }
-        }
-
-        internal static void TabIndexProperty_MethodToUpdateDom(DependencyObject d, object newValue)
-        {
-            var control = (Control)d;
-            control.UpdateTabIndex(control.IsTabStop, (int)newValue);
-        }
-
-        internal static void TabStopProperty_MethodToUpdateDom(DependencyObject d, object newValue)
-        {
-            var control = (Control)d;
-            control.UpdateTabIndex((bool)newValue, control.TabIndex);
         }
 
         //-----------------------
@@ -687,7 +654,11 @@ namespace Windows.UI.Xaml.Controls
                 typeof(Control), 
                 new PropertyMetadata(true)
                 {
-                    MethodToUpdateDom = TabStopProperty_MethodToUpdateDom,
+                    MethodToUpdateDom = static (d, newValue) =>
+                    {
+                        var control = (Control)d;
+                        control.UpdateTabIndex((bool)newValue, control.TabIndex);
+                    },
                 });
 
         //-----------------------
@@ -739,6 +710,13 @@ namespace Windows.UI.Xaml.Controls
             }
         }
 
+        /// <summary>
+        /// Loads the relevant control template so that its parts can be referenced.
+        /// </summary>
+        /// <returns>
+        /// Returns whether the visual tree was rebuilt by this call. true indicates the
+        /// tree was rebuilt; false indicates that the previous visual tree was retained.
+        /// </returns>
         public new bool ApplyTemplate()
         {
             return base.ApplyTemplate();
@@ -757,11 +735,6 @@ namespace Windows.UI.Xaml.Controls
             return base.GetTemplateChild(childName);
         }
 
-        internal void RaiseOnApplyTemplate()
-        {
-            this.OnApplyTemplate();
-        }
-
         //-----------------------
         // OTHER
         //-----------------------
@@ -775,28 +748,50 @@ namespace Windows.UI.Xaml.Controls
         /// </returns>
         public bool Focus()
         {
-            if (Keyboard.IsFocusable(this))
+            if (!Keyboard.IsSubTreeFocusable(this))
             {
-                INTERNAL_HtmlDomManager.SetFocus(this);
-                
-                FocusManager.SetFocusedElement(this.INTERNAL_ParentWindow, this);
-
-                return true; //todo: see if there is a way for this to fail, in which case we want to return false.
+                return false;
             }
-            return false;
+
+            return FocusElement(this) || FocusInTree(this);
+
+            static bool FocusElement(Control c)
+            {
+                if (Keyboard.IsKeyboardFocusable(c))
+                {
+                    FocusManager.SetFocusedElement(c.INTERNAL_ParentWindow, c);
+                    INTERNAL_HtmlDomManager.SetFocus(c);
+
+                    return true;
+                }
+
+                return false;
+            }
+
+            static bool FocusInTree(UIElement uie)
+            {
+                int childrenCount = VisualTreeHelper.GetChildrenCount(uie);
+                for (int i = 0; i < childrenCount; i++)
+                {
+                    UIElement child = VisualTreeHelper.GetChild(uie, i) as UIElement;
+                    if (!Keyboard.IsSubTreeFocusable(child))
+                    {
+                        continue;
+                    }
+
+                    if ((child is Control c && FocusElement(c)) || FocusInTree(child))
+                    {
+                        return true;
+                    }
+                }
+
+                return false;
+            }
         }
 
-        private bool _useSystemFocusVisuals = false;
-        /// <summary>
-        /// Determines whether the control displays the browser's default outline when Focused.
-        /// This property is ignored for Controls with a Template that defines the "Focused" VisualState.
-        /// The default value is False.
-        /// </summary>
-        public bool UseSystemFocusVisuals
-        {
-            get { return _useSystemFocusVisuals; }
-            set { _useSystemFocusVisuals = value; } //todo: change the element in the visual tree?
-        }
+        [Obsolete(Helper.ObsoleteMemberMessage)]
+        [EditorBrowsable(EditorBrowsableState.Never)]
+        public bool UseSystemFocusVisuals { get; set; }
 
 #if MIGRATION
         public override void OnApplyTemplate()
@@ -1161,6 +1156,8 @@ void Control_PointerReleased(object sender, Input.PointerRoutedEventArgs e)
         {
 
         }
+
+        /// <inheritdoc/>
         protected override Size MeasureOverride(Size availableSize)
         {
             int count = VisualChildrenCount;
@@ -1178,5 +1175,20 @@ void Control_PointerReleased(object sender, Input.PointerRoutedEventArgs e)
             return new Size(0.0, 0.0);
         }
 
+        /// <inheritdoc/>
+        protected override Size ArrangeOverride(Size finalSize)
+        {
+            int count = VisualChildrenCount;
+
+            if (count > 0)
+            {
+                UIElement child = GetVisualChild(0);
+                if (child != null)
+                {
+                    child.Arrange(new Rect(finalSize));
+                }
+            }
+            return finalSize;
+        }
     }
 }

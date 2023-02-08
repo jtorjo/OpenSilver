@@ -52,6 +52,7 @@ namespace Windows.UI.Xaml.Controls
     {
         private bool _isProcessingInput;
         private int? _selectionIdxCache;
+        private ScrollViewer _scrollViewer;
         private FrameworkElement _contentElement;
         private ITextBoxViewHost<TextBoxView> _textViewHost;
 
@@ -67,8 +68,6 @@ namespace Windows.UI.Xaml.Controls
         }
 
         internal override object GetFocusTarget() => _textViewHost?.View?.InputDiv;
-
-        internal sealed override bool INTERNAL_GetFocusInBrowser => true;
 
         /// <summary>
         /// Gets or sets the value that determines whether the text box allows and displays
@@ -286,9 +285,9 @@ namespace Windows.UI.Xaml.Controls
         private static void OnHorizontalScrollBarVisibilityChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
         {
             var tb = (TextBox)d;
-            if (tb._textViewHost != null)
+            if (tb._scrollViewer != null)
             {
-                tb._textViewHost.View.OnHorizontalScrollBarVisibilityChanged((ScrollBarVisibility)e.NewValue);
+                tb._scrollViewer.HorizontalScrollBarVisibility = (ScrollBarVisibility)e.NewValue;
             }
         }
 
@@ -314,9 +313,9 @@ namespace Windows.UI.Xaml.Controls
         private static void OnVerticalScrollBarVisibilityChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
         {
             var tb = (TextBox)d;
-            if (tb._textViewHost != null)
+            if (tb._scrollViewer != null)
             {
-                tb._textViewHost.View.OnVerticalScrollBarVisibilityChanged((ScrollBarVisibility)e.NewValue);
+                tb._scrollViewer.VerticalScrollBarVisibility = (ScrollBarVisibility)e.NewValue;
             }
         }
 
@@ -429,6 +428,39 @@ namespace Windows.UI.Xaml.Controls
             }
 
             tb.UpdateVisualStates();
+        }
+
+        /// <summary>
+        /// Gets or sets a value that specifies whether the <see cref="TextBox"/> input 
+        /// interacts with a spell check engine.
+        /// </summary>
+        /// <returns>
+        /// true if the <see cref="TextBox"/> input interacts with a spell check engine; 
+        /// otherwise, false. The default is false.
+        /// </returns>
+        public bool IsSpellCheckEnabled
+        {
+            get { return (bool)GetValue(IsSpellCheckEnabledProperty); }
+            set { SetValue(IsSpellCheckEnabledProperty, value); }
+        }
+
+        /// <summary>
+        /// Identifies the <see cref="IsSpellCheckEnabled"/> dependency property.
+        /// </summary>
+        public static readonly DependencyProperty IsSpellCheckEnabledProperty =
+            DependencyProperty.Register(
+                nameof(IsSpellCheckEnabled),
+                typeof(bool),
+                typeof(TextBox),
+                new PropertyMetadata(false, OnIsSpellCheckEnabledChanged));
+
+        private static void OnIsSpellCheckEnabledChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
+        {
+            var tb = (TextBox)d;
+            if (tb._textViewHost != null)
+            {
+                tb._textViewHost.View.OnIsSpellCheckEnabledChanged((bool)e.NewValue);
+            }
         }
         
         public string SelectedText
@@ -555,6 +587,7 @@ namespace Windows.UI.Xaml.Controls
         {
             base.OnApplyTemplate();
 
+            _scrollViewer = null;
             if (_contentElement != null)
             {
                 ClearContentElement();
@@ -571,6 +604,9 @@ namespace Windows.UI.Xaml.Controls
 
             if (contentElement != null)
             {
+                _scrollViewer = contentElement as ScrollViewer;
+                InitializeScrollViewer();
+
                 _contentElement = contentElement;
                 InitializeContentElement();
             }
@@ -630,11 +666,7 @@ namespace Windows.UI.Xaml.Controls
 
             base.OnKeyDown(e);
 
-#if CSHTML5BLAZOR
-            if (OpenSilver.Interop.IsRunningInTheSimulator_WorkAround)
-#else
             if (OpenSilver.Interop.IsRunningInTheSimulator)
-#endif
             {
                 // Not implemented for the simulator
                 return;
@@ -646,144 +678,118 @@ namespace Windows.UI.Xaml.Controls
                 return;
             }
 
-            if (e.Key == Key.Left || e.Key == Key.Right)
+            switch (e.Key)
             {
-                if (e.KeyModifiers == ModifierKeys.None)
-                {
-                    if (SelectionLength > 0)
+                case Key.Left:
+                case Key.Right:
+                    if (e.KeyModifiers == ModifierKeys.None)
                     {
-                        if (e.Key == Key.Left)
-                            Select(SelectionStart, 0);
+                        if (SelectionLength > 0)
+                        {
+                            if (e.Key == Key.Left)
+                                Select(SelectionStart, 0);
+                            else
+                                Select(SelectionStart + SelectionLength, 0);
+
+                            e.Handled = true;
+                        }
                         else
-                            Select(SelectionStart + SelectionLength, 0);
-
-                        e.Handled = true;
-                    }
-                    else
-                    {
-                        if (e.Key == Key.Left && SelectionStart > 0)
                         {
-                            Select(SelectionStart - 1, 0);
-                            e.Handled = true;
-                        }
-                        else if (e.Key == Key.Right && SelectionStart < Text.Length)
-                        {
-                            Select(SelectionStart + 1, 0);
-                            e.Handled = true;
+                            if (e.Key == Key.Left && SelectionStart > 0)
+                            {
+                                Select(SelectionStart - 1, 0);
+                                e.Handled = true;
+                            }
+                            else if (e.Key == Key.Right && SelectionStart < Text.Length)
+                            {
+                                Select(SelectionStart + 1, 0);
+                                e.Handled = true;
+                            }
                         }
                     }
-                }
-                else if (e.KeyModifiers == ModifierKeys.Shift)
-                {
-                    int caret = CaretPosition;
-                    int selectionStartWithDirection = SelectionStart;
-                    int selectionEndWithDirection = SelectionStart + SelectionLength;
+                    else if (e.KeyModifiers == ModifierKeys.Shift)
+                    {
+                        int caret = CaretPosition;
+                        int selectionStartWithDirection = SelectionStart;
+                        int selectionEndWithDirection = SelectionStart + SelectionLength;
 
-                    if (caret != selectionEndWithDirection)
-                    {
-                        // Selection direction is backward
-                        int tmp = selectionEndWithDirection;
-                        selectionEndWithDirection = selectionStartWithDirection;
-                        selectionStartWithDirection = tmp;
-                    }
+                        if (caret != selectionEndWithDirection)
+                        {
+                            // Selection direction is backward
+                            int tmp = selectionEndWithDirection;
+                            selectionEndWithDirection = selectionStartWithDirection;
+                            selectionStartWithDirection = tmp;
+                        }
 
-                    if (e.Key == Key.Left && selectionEndWithDirection > 0)
-                    {
-                        selectionEndWithDirection--;
-                        
-                        Select(selectionStartWithDirection, selectionEndWithDirection - selectionStartWithDirection);
-                        
-                        e.Handled = true;
+                        if (e.Key == Key.Left && selectionEndWithDirection > 0)
+                        {
+                            selectionEndWithDirection--;
+
+                            Select(selectionStartWithDirection, selectionEndWithDirection - selectionStartWithDirection);
+
+                            e.Handled = true;
+                        }
+                        else if (e.Key == Key.Right && selectionEndWithDirection < Text.Length)
+                        {
+                            selectionEndWithDirection++;
+                            Select(selectionStartWithDirection, selectionEndWithDirection - selectionStartWithDirection);
+
+                            e.Handled = true;
+                        }
                     }
-                    else if (e.Key == Key.Right && selectionEndWithDirection < Text.Length)
+                    else if (e.KeyModifiers == ModifierKeys.Control)
                     {
-                        selectionEndWithDirection++;
-                        Select(selectionStartWithDirection, selectionEndWithDirection - selectionStartWithDirection);
-                        
-                        e.Handled = true;
+                        // Not implemented
                     }
-                }
-                else if (e.KeyModifiers == ModifierKeys.Control)
-                {
+                    else if (e.KeyModifiers == (ModifierKeys.Control | ModifierKeys.Shift))
+                    {
+                        // Not implemented
+                    }
+                    break;
+
+                case Key.Up:
+                case Key.Down:
                     // Not implemented
-                }
-                else if (e.KeyModifiers == (ModifierKeys.Control | ModifierKeys.Shift))
-                {
-                    // Not implemented
-                }
-            }
+                    break;
 
-            if (e.Key == Key.Up || e.Key == Key.Down)
-            {
-                // Not implemented
+                case Key.Home:
+                case Key.End:
+                    if (_textViewHost != null)
+                    {
+                        int index = e.Key == Key.Home ? 0 : Text.Length;
+                        _textViewHost.View.NEW_GET_SELECTION(out int start, out int length);
+                        if (length > 0 || start != index)
+                        {
+                            _textViewHost.View.NEW_SET_SELECTION(index, index);
+                            e.Handled = true;
+                        }
+                    }
+                    break;
             }
         }
 #endif
         protected override void OnTextInput(TextCompositionEventArgs e)
         {
-            if (e.Handled)
-                return;
-
             base.OnTextInput(e);
 
-#if CSHTML5BLAZOR
-            if (OpenSilver.Interop.IsRunningInTheSimulator_WorkAround)
-#else
-            if (OpenSilver.Interop.IsRunningInTheSimulator)
-#endif
+            if (e.Handled)
             {
-                // Not implemented for the simulator
+                e.PreventDefault = true;
                 return;
             }
 
-            if (this.IsReadOnly)
-                return;
-
-            if (this.MaxLength != 0 && Text.Length - SelectionLength >= this.MaxLength)
-                return;
-
-            if (e.Text == "\r")
+            if (IsReadOnly ||
+                (!AcceptsReturn && (e.Text == "\r" || e.Text == "\n")) ||
+                (MaxLength != 0 && Text.Length - SelectionLength >= MaxLength))
             {
-                if (this.AcceptsReturn == false)
-                    return;
-
-                // Not implemented for multiple text lines
+                e.PreventDefault = true;
                 return;
             }
 
-            if (this.Text.Contains("\r") || this.Text.Contains("\n"))
-            {
-                // Not implemented for multiple text lines
-                return;
-            }
-
-            this.SelectedText = e.Text;
             e.Handled = true;
         }
-        internal void INTERNAL_CheckTextInputHandled(TextCompositionEventArgs e, object jsEventArg)
-        {
-#if CSHTML5BLAZOR
-            if (OpenSilver.Interop.IsRunningInTheSimulator_WorkAround)
-#else
-            if (OpenSilver.Interop.IsRunningInTheSimulator)
-#endif
-            {
-                // Not implemented for the simulator
-                return;
-            }
 
-            bool multiLines = this.Text.Contains("\r") || this.Text.Contains("\n");
-            bool requireNewLine = e.Text == "\r" && this.AcceptsReturn;
-            if (e.Handled == false && (requireNewLine || multiLines))
-            {
-                // Not implemented for multiple text lines
-                return;
-            }
-
-            OpenSilver.Interop.ExecuteJavaScriptVoid($"{CSHTML5.INTERNAL_InteropImplementation.GetVariableStringForJS(jsEventArg)}.preventDefault()");
-        }
-
-        internal void INTERNAL_TextUpdated()
+        internal sealed override void OnTextInputInternal()
         {
             if (_textViewHost != null)
             {
@@ -834,6 +840,15 @@ namespace Windows.UI.Xaml.Controls
             else
             {
                 GoToState(VisualStates.StateNormal);
+            }
+        }
+
+        private void InitializeScrollViewer()
+        {
+            if (_scrollViewer != null)
+            {
+                _scrollViewer.HorizontalScrollBarVisibility = HorizontalScrollBarVisibility;
+                _scrollViewer.VerticalScrollBarVisibility = VerticalScrollBarVisibility;
             }
         }
 

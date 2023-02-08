@@ -33,8 +33,6 @@ namespace Windows.UI.Xaml
 {
     public partial class UIElement
     {
-        private NativeEventsManager _eventsManager;
-
         internal static void NativeEventCallback(UIElement mouseTarget, UIElement keyboardTarget, object jsEventArg)
         {
             string type = OpenSilver.Interop.ExecuteJavaScriptString($"{CSHTML5.INTERNAL_InteropImplementation.GetVariableStringForJS(jsEventArg)}.type", false);
@@ -75,47 +73,31 @@ namespace Windows.UI.Xaml
                     keyboardTarget.ProcessOnKeyUp(jsEventArg);
                     break;
 
-                case "focusin":
-                    keyboardTarget.ProcessOnFocusIn(jsEventArg);
+                case "focus":
+                    keyboardTarget.ProcessOnFocus(jsEventArg);
                     break;
 
-                case "focusout":
-                    keyboardTarget.ProcessOnFocusOut(jsEventArg);
+                case "blur":
+                    keyboardTarget.ProcessOnBlur(jsEventArg);
                     break;
 
                 case "keypress":
-                    keyboardTarget.ProcessOnInput(jsEventArg);
+                    keyboardTarget.ProcessOnKeyPress(jsEventArg);
                     break;
 
                 case "input":
-                    keyboardTarget.ProcessOnTextUpdated(jsEventArg);
+                    keyboardTarget.ProcessOnInput(jsEventArg);
                     break;
             }
         }
 
         private void ProcessOnMouseMove(object jsEventArg)
         {
-            string eventType = OpenSilver.Interop.ExecuteJavaScriptString($"{CSHTML5.INTERNAL_InteropImplementation.GetVariableStringForJS(jsEventArg)}.type", false);
-            if (!(ignoreMouseEvents && eventType == "mousemove"))
-            {
 #if MIGRATION
-                ProcessPointerEvent(jsEventArg, MouseMoveEvent);
+            ProcessPointerEvent(jsEventArg, MouseMoveEvent);
 #else
-                ProcessPointerEvent(jsEventArg, PointerMovedEvent);
+            ProcessPointerEvent(jsEventArg, PointerMovedEvent);
 #endif
-            }
-
-            if (eventType == "touchend")
-            {
-                ignoreMouseEvents = true;
-                if (_ignoreMouseEventsTimer == null)
-                {
-                    _ignoreMouseEventsTimer = new DispatcherTimer() { Interval = new TimeSpan(0, 0, 0, 0, 100) };
-                    _ignoreMouseEventsTimer.Tick += _ignoreMouseEventsTimer_Tick;
-                }
-                _ignoreMouseEventsTimer.Stop();
-                _ignoreMouseEventsTimer.Start();
-            }
         }
 
         private void ProcessOnMouseDown(object jsEventArg)
@@ -205,59 +187,34 @@ namespace Windows.UI.Xaml
             RoutedEvent routedEvent,
             bool refreshClickCount = false)
         {
-            string eventType = OpenSilver.Interop.ExecuteJavaScriptString($"{CSHTML5.INTERNAL_InteropImplementation.GetVariableStringForJS(jsEventArg)}.type", false);
-            if (!(ignoreMouseEvents && eventType.StartsWith("mouse"))) //Ignore mousedown and mouseup if the touch equivalents have been handled.
-            {
+            string eventVariable = CSHTML5.INTERNAL_InteropImplementation.GetVariableStringForJS(jsEventArg);
+            string eventType = OpenSilver.Interop.ExecuteJavaScriptString($"{eventVariable}.type", false);
+
 #if MIGRATION
-                MouseButtonEventArgs e = new MouseButtonEventArgs()
+            MouseButtonEventArgs e = new MouseButtonEventArgs()
 #else
-                PointerRoutedEventArgs e = new PointerRoutedEventArgs()
+            PointerRoutedEventArgs e = new PointerRoutedEventArgs()
 #endif
-                {
-                    RoutedEvent = routedEvent,
-                    OriginalSource = this,
-                    INTERNAL_OriginalJSEventArg = jsEventArg,
-                };
+            {
+                RoutedEvent = routedEvent,
+                OriginalSource = this,
+                INTERNAL_OriginalJSEventArg = jsEventArg,
+            };
 
-                if (refreshClickCount)
-                {
-                    e.RefreshClickCount(this);
-                }
-
-                if (e.CheckIfEventShouldBeTreated(this, jsEventArg))
-                {
-                    // Fill the position of the pointer and the key modifiers:
-                    e.FillEventArgs(this, jsEventArg);
-
-                    // Raise the event (if it was not already marked as "handled" by a child element in the visual tree):
-                    RaiseEvent(e);
-                }
-
-                if (eventType == "touchend") //prepare to ignore the mouse events since they were already handled as touch events
-                {
-                    ignoreMouseEvents = true;
-                    if (_ignoreMouseEventsTimer == null)
-                    {
-                        _ignoreMouseEventsTimer = new DispatcherTimer() { Interval = new TimeSpan(0, 0, 0, 0, 100) };
-                        _ignoreMouseEventsTimer.Tick += _ignoreMouseEventsTimer_Tick;
-                    }
-                    _ignoreMouseEventsTimer.Stop();
-                    _ignoreMouseEventsTimer.Start();
-                }
+            if (refreshClickCount)
+            {
+                e.RefreshClickCount(this);
             }
-        }
 
-        // This boolean is useful because we want to ignore mouse events when touch events have happened
-        // so the same user inputs are not handled twice. (Note: when using touch events, the browsers
-        // fire the touch events at the moment of the action, then throw the mouse events once touchend
-        // is fired)
-        private static bool ignoreMouseEvents = false;
-        private static DispatcherTimer _ignoreMouseEventsTimer = null;
-        
-        private void _ignoreMouseEventsTimer_Tick(object sender, object e)
-        {
-            ignoreMouseEvents = false;
-            _ignoreMouseEventsTimer.Stop();
+            // touchend event occurs only once as opposed to mouseup, so current UIElement is not the same as captured by touchstart event
+            if (eventType == "touchend" || e.CheckIfEventShouldBeTreated(this, jsEventArg))
+            {
+                // Fill the position of the pointer and the key modifiers:
+                e.FillEventArgs(this, jsEventArg);
+
+                // Raise the event (if it was not already marked as "handled" by a child element in the visual tree):
+                RaiseEvent(e);
+            }
         }
 
         /// <summary>
@@ -412,7 +369,11 @@ namespace Windows.UI.Xaml
 #endif
         }
 
-        private void ProcessOnInput(object jsEventArg)
+        private void ProcessOnInput(object jsEventArg) => OnTextInputInternal();
+
+        internal virtual void OnTextInputInternal() { }
+
+        private void ProcessOnKeyPress(object jsEventArg)
         {
             if (!int.TryParse(OpenSilver.Interop.ExecuteJavaScript($"{CSHTML5.INTERNAL_InteropImplementation.GetVariableStringForJS(jsEventArg)}.keyCode").ToString(), out int keyCode))
             {
@@ -432,18 +393,10 @@ namespace Windows.UI.Xaml
 
             RaiseEvent(e);
 
-            if (this is Controls.TextBox)
+            if (e.PreventDefault)
             {
-                (this as Controls.TextBox).INTERNAL_CheckTextInputHandled(e, jsEventArg);
-            }
-        }
-
-        // This callback will be triggered textinput is not handled
-        private void ProcessOnTextUpdated(object jsEventArg)
-        {
-            if (this is Controls.TextBox)
-            {
-                (this as Controls.TextBox).INTERNAL_TextUpdated();
+                OpenSilver.Interop.ExecuteJavaScriptVoid(
+                    $"{CSHTML5.INTERNAL_InteropImplementation.GetVariableStringForJS(jsEventArg)}.preventDefault()");
             }
         }
 
@@ -506,7 +459,7 @@ namespace Windows.UI.Xaml
             RaiseEvent(e);
         }
 
-        private void ProcessOnFocusIn(object jsEventArg)
+        private void ProcessOnFocus(object jsEventArg)
         {
             ProcessOnGotFocus(jsEventArg);
         }
@@ -528,7 +481,7 @@ namespace Windows.UI.Xaml
             RaiseEvent(e);
         }
 
-        private void ProcessOnFocusOut(object jsEventArg)
+        private void ProcessOnBlur(object jsEventArg)
         {
             ProcessOnLostFocus(jsEventArg);
         }

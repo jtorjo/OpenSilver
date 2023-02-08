@@ -7,6 +7,7 @@
     <!--<Style x:Key="DefaultThumbStyle" TargetType="Thumb">-->
     <Style TargetType="Thumb">
         <Setter Property="Background" Value="#FFE2E2E2"/>
+        <Setter Property="IsTabStop" Value="False"/>
         <Setter Property="BorderThickness" Value="0" />
         <Setter Property="Template">
             <Setter.Value>
@@ -15,7 +16,7 @@
                         <VisualStateManager.VisualStateGroups>
                             <VisualStateGroup x:Name="CommonStates">
                                 <VisualState x:Name="Normal"/>
-                                <VisualState x:Name="PointerOver">
+                                <VisualState x:Name="MouseOver">
                                     <Storyboard>
                                         <DoubleAnimation Duration="0" To="1" Storyboard.TargetProperty="Opacity" Storyboard.TargetName="BackgroundPointerOver"/>
                                         <DoubleAnimation Duration="0" To="0" Storyboard.TargetProperty="Opacity" Storyboard.TargetName="Background" />

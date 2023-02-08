@@ -151,6 +151,7 @@ namespace CSHTML5.Internal
         public string cursor { set { SetStylePropertyValue("cursor", value); } }
         public string display { set { SetStylePropertyValue("display", value); _display = value; } get { return _display; } }
         public string filter { set { SetStylePropertyValue("filter", value); } }
+        public string fontFamily { set { SetStylePropertyValue("fontFamily", value); } }
         public string fontSize { set { SetStylePropertyValue("fontSize", value); } }
         public string gridColumnEnd { set { SetStylePropertyValue("gridColumnEnd", value); } }
         public string gridColumnStart { set { SetStylePropertyValue("gridColumnStart", value); } }
@@ -210,6 +211,11 @@ namespace CSHTML5.Internal
         public string gridArea { set { SetStylePropertyValue("gridArea", value); } }
         public string visibility { set { SetStylePropertyValue("visibility", value); } }
         public string clip { set { SetStylePropertyValue("clip", value); } }
+        public string overflowWrap { set { SetStylePropertyValue("overflowWrap", value); } }
+        public string alignItems { set { SetStylePropertyValue("alignItems", value); } }
+        public string justifyContent { set { SetStylePropertyValue("justifyContent", value); } }
+        public string flexWrap { set { SetStylePropertyValue("flexWrap", value); } }
+        public string flexDirection { set { SetStylePropertyValue("flexDirection", value); } }
 
         //-----------------------------------------------------------------------
         // Usage stats for To-Do Calendar (number of types each property is set):

@@ -18,12 +18,15 @@ using System.Text.Json;
 using System.Text;
 using OpenSilver.Internal;
 using System.Linq;
+using System.Diagnostics;
 
 #if MIGRATION
 using System.Windows;
+using System.Windows.Controls.Primitives;
 #else
 using Windows.Foundation;
 using Windows.UI.Xaml;
+using Windows.UI.Xaml.Controls.Primitives;
 #endif
 
 namespace CSHTML5.Internal // IMPORTANT: if you change this namespace, make sure to change the dynamic call from the Simulator as well.
@@ -54,6 +57,17 @@ namespace CSHTML5.Internal // IMPORTANT: if you change this namespace, make sure
             }
 
             return _rootDomElement;
+        }
+
+        internal static UIElement GetElementById(string id)
+        {
+            if (_store.TryGetValue(id, out WeakReference<UIElement> weakRef)
+                && weakRef.TryGetTarget(out UIElement uie))
+            {
+                return uie;
+            }
+
+            return null;
         }
 
         public static void RemoveFromDom(object domNode, string commentForDebugging = null)
@@ -121,14 +135,21 @@ namespace CSHTML5.Internal // IMPORTANT: if you change this namespace, make sure
                 // todo: find a way to use a more generic method (see: IsRunningInTheSimulator)
                 if (!OpenSilver.Interop.IsRunningInTheSimulator)
                 {
-                    string sElement = INTERNAL_InteropImplementation.GetVariableStringForJS(domElementRefConcernedByFocus);
-                    OpenSilver.Interop.ExecuteJavaScriptFastAsync($@"setTimeout(function() {{ {sElement}.focus(); }}, 1)");
+                    SetFocusNative(domElementRefConcernedByFocus);
                 }
                 else
                 {
                     SetFocus_SimulatorOnly(domElementRefConcernedByFocus);
                 }
             }
+        }
+
+        internal static void SetFocusNative(object domElementRef)
+        {
+            Debug.Assert(domElementRef != null);
+
+            string sElement = INTERNAL_InteropImplementation.GetVariableStringForJS(domElementRef);
+            OpenSilver.Interop.ExecuteJavaScriptFastAsync($"setTimeout(function() {{ {sElement}.focus(); }}, 1)");
         }
 
         static void SetFocus_SimulatorOnly(object domElementRef)
@@ -368,10 +389,26 @@ setTimeout(function(){{ var element2 = document.getElementById(""{uniqueIdentifi
             return CreateDomElementAndAppendIt_ForUseByTheSimulator(domElementTag, parentRef, associatedUIElement, index);
         }
 
+        internal static object CreatePopupRootDomElementAndAppendIt(PopupRoot popupRoot)
+        {
+            Debug.Assert(popupRoot != null);
+
+            string uniqueIdentifier = popupRoot.INTERNAL_UniqueIndentifier;
+            string sRootElement = INTERNAL_InteropImplementation.GetVariableStringForJS(
+                popupRoot.INTERNAL_ParentWindow.INTERNAL_RootDomElement);
+            string sPointerEvents = popupRoot.INTERNAL_LinkedPopup.StayOpen ? "none" : "auto";
+            OpenSilver.Interop.ExecuteJavaScriptFastAsync(
+                $"document.createPopupRootElement('{uniqueIdentifier}', {sRootElement}, '{sPointerEvents}');");
+
+            _store.Add(uniqueIdentifier, new WeakReference<UIElement>(popupRoot));
+
+            return new INTERNAL_HtmlDomElementReference(uniqueIdentifier, null);
+        }
+
         internal static object CreateTextBlockDomElementAndAppendIt(
             object parentRef,
             UIElement associatedUIElement,
-            string whiteSpace)
+            bool wrap)
         {
 #if PERFSTAT
             Performance.Counter("CreateTextBlockDomElementAndAppendIt", t0);
@@ -382,13 +419,13 @@ setTimeout(function(){{ var element2 = document.getElementById(""{uniqueIdentifi
             if (parent != null)
             {
                 OpenSilver.Interop.ExecuteJavaScriptFastAsync(
-                    $@"document.createTextBlockElement(""{uniqueIdentifier}"", ""{parent.UniqueIdentifier}"", ""{whiteSpace}"")");
+                    $@"document.createTextBlockElement(""{uniqueIdentifier}"", ""{parent.UniqueIdentifier}"", {(wrap ? "true" : "false")})");
             }
             else
             {
                 string sParentRef = INTERNAL_InteropImplementation.GetVariableStringForJS(parentRef);
                 OpenSilver.Interop.ExecuteJavaScriptFastAsync(
-                    $@"document.createTextBlockElement(""{uniqueIdentifier}"", {sParentRef}, ""{whiteSpace}"")");
+                    $@"document.createTextBlockElement(""{uniqueIdentifier}"", {sParentRef}, {(wrap ? "true" : "false")})");
             }
 
             _store.Add(uniqueIdentifier, new WeakReference<UIElement>(associatedUIElement));
@@ -659,21 +696,21 @@ parentElement.appendChild(child);";
         }
 
         [EditorBrowsable(EditorBrowsableState.Never)]
-        [Obsolete]
+        [Obsolete(Helper.ObsoleteMemberMessage)]
         public static bool IsInternetExplorer()
         {
             return false;
         }
 
         [EditorBrowsable(EditorBrowsableState.Never)]
-        [Obsolete]
+        [Obsolete(Helper.ObsoleteMemberMessage)]
         public static bool IsEdge()
         {
             return false;
         }
 
         [EditorBrowsable(EditorBrowsableState.Never)]
-        [Obsolete]
+        [Obsolete(Helper.ObsoleteMemberMessage)]
         public static bool IsFirefox()
         {
             return false;

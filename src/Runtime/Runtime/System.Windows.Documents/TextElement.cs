@@ -33,10 +33,19 @@ namespace Windows.UI.Xaml.Documents
     /// </summary>
     public abstract partial class TextElement : Control
     {
-        internal override NativeEventsManager CreateEventsManager()
+        /// <summary>
+        /// Initializes a new instance of the <see cref="TextElement"/> class.
+        /// </summary>
+        protected TextElement()
         {
-            return null;
+            // TextElement should not be a Control, ence it should not be able to
+            // get focus.
+            IsTabStop = false;
         }
+
+        internal sealed override void AddEventListeners() { }
+
+        internal sealed override void DispatchEvent(object jsEventArg) { }
 
         internal override void UpdateTabIndex(bool isTabStop, int tabIndex)
         {

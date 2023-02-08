@@ -42,10 +42,7 @@
 	</ItemGroup>
   
 	<ItemGroup>
-		<ProjectReference Include="..\OpenSilver.Xaml\OpenSilver.Xaml.csproj" />
-	</ItemGroup>
-  
-	<ItemGroup>
+    <Compile Include="..\OpenSilver.Xaml\**\*.cs" LinkBase="XamlReader" />
 		<Compile Include="APP_SUPPORT\JavaScriptExecutionHandler.cs" />
 		<Compile Include="Core\Events\DOMEventManager.cs" />
 		<Compile Include="Core\Main\CopyOnWriteList.cs" />
@@ -61,9 +58,11 @@
 		<Compile Include="Diagnostics\DebugInfo.cs" />
 		<Compile Include="OpenSilver\Controls\OpenFileDialog.cs" />
 		<Compile Include="OpenSilver\Internal\Clipboard.cs" />
+		<Compile Include="OpenSilver\Internal\CriticalExceptions.cs" />
 		<Compile Include="OpenSilver\Internal\DebounceDispatcher.cs" />
+		<Compile Include="OpenSilver\Internal\DependentList.cs" />
+		<Compile Include="OpenSilver\Internal\Helper.cs" />
 		<Compile Include="OpenSilver\Internal\INameResolver.cs" />
-		<Compile Include="OpenSilver\Internal\NativeEventsManager.cs" />
 		<Compile Include="OpenSilver\Internal\InheritedPropertyChangedEventArgs.cs" />
 		<Compile Include="OpenSilver\Internal\ReferenceIDGenerator.cs" />
 		<Compile Include="OpenSilver\Internal\ResizeObserver.cs" />
@@ -74,14 +73,13 @@
 		<Compile Include="OpenSilver\Internal\Data\DynamicValueConverter.cs" />
 		<Compile Include="OpenSilver\Internal\Data\IPropertyPathNode.cs" />
 		<Compile Include="OpenSilver\Internal\Data\SourcePropertyNode.cs" />
-		<Compile Include="OpenSilver\Internal\Data\DependencyPropertyListener.cs" />
 		<Compile Include="OpenSilver\Internal\Data\DataExtensionMethods.cs" />
 		<Compile Include="OpenSilver\Internal\Data\EnumerableCollectionView.cs" />
 		<Compile Include="OpenSilver\Internal\Data\IndexedEnumerable.cs" />
 		<Compile Include="OpenSilver\Internal\Data\IDependencyPropertyChangedEventArgs.cs" />
 		<Compile Include="OpenSilver\Internal\Data\IndexedPropertyPathNode.cs" />
-		<Compile Include="OpenSilver\Internal\Data\IPropertyChangedListener.cs" />
-		<Compile Include="OpenSilver\Internal\Data\PropertyChangedListener.cs" />
+		<Compile Include="OpenSilver\Internal\Data\IDependencyPropertyChangedListener.cs" />
+		<Compile Include="OpenSilver\Internal\Data\DependencyPropertyChangedListener.cs" />
 		<Compile Include="OpenSilver\Internal\Data\PropertyPathNode.cs" />
 		<Compile Include="OpenSilver\Internal\Data\PropertyPathParser.cs" />
 		<Compile Include="OpenSilver\Internal\Data\PropertyPathWalker.cs" />
@@ -93,6 +91,7 @@
 			<Link>OpenSilver\Internal\XamlResourcesHelper.cs</Link>
 		</Compile>
 		<Compile Include="OpenSilver\Internal\TokenizerHelper.cs" />
+		<Compile Include="OpenSilver\Internal\WeakEventListener.cs" />
 		<Compile Include="OpenSilver\Internal\Xaml\Context\XamlContext.cs" />
 		<Compile Include="OpenSilver\Internal\Xaml\Context\XamlContextStack.cs" />
 		<Compile Include="OpenSilver\Internal\Xaml\Context\XamlObjectFrame.cs" />
@@ -115,6 +114,7 @@
 		<Compile Include="OpenSilver\Internal\IJavaScriptConvertible.cs" />
 		<Compile Include="PublicAPI\Interop\Interop.Obsolete.cs" />
 		<Compile Include="PublicAPI\Interop\JavascriptCallback.cs" />
+		<Compile Include="PublicAPI\Interop\JavaScriptCallbackHelper.cs" />
 		<Compile Include="PublicAPI\Interop\OnCallBackImpl.cs" />
 		<Compile Include="PublicAPI\Interop\OnCallbackSimulator.cs" />
 		<Compile Include="PublicAPI\Native.Html.Controls\NativeComboBox.cs" />
@@ -124,6 +124,7 @@
 		<Compile Include="System.ComponentModel.Composition\WORKINPROGRESS\CompositionInitializer.cs" />
 		<Compile Include="System.Runtime.CompilerServices\DefaultInterpolatedStringHandler.cs" />
 		<Compile Include="System.Runtime.CompilerServices\InterpolatedStringHandlerAttribute.cs" />
+		<Compile Include="System.Runtime.CompilerServices\IsExternalInit.cs" />
 		<Compile Include="System.ServiceModel.Channels\WORKINPROGRESS\PollingDuplexMode.cs" />
 		<Compile Include="System.ServiceModel.Channels\WORKINPROGRESS\PollingDuplexHttpBinding.cs" />
 		<Compile Include="System.ServiceModel\WORKINPROGRESS\PollingDuplexHttpSecurity.cs" />
@@ -166,7 +167,20 @@
 		<Compile Include="System.Windows.Controls\CleanUpVirtualizedItemEventArgs.cs" />
 		<Compile Include="System.Windows.Controls\DateTimeHelper.cs" />
 		<Compile Include="System.Windows.Controls\DragDecorator.cs" />
+		<Compile Include="System.Windows.Controls\GridSplitter\DragValidator.cs" />
+		<Compile Include="System.Windows.Controls\GridSplitter\GridSplitter.cs" />
+		<Compile Include="System.Windows.Controls\GridSplitter\GridSplitter.DefinitionAbstraction.cs" />
+		<Compile Include="System.Windows.Controls\GridSplitter\GridSplitter.DoubleUtil.cs" />
+		<Compile Include="System.Windows.Controls\GridSplitter\GridSplitter.GridResizeBehavior.cs" />
+		<Compile Include="System.Windows.Controls\GridSplitter\GridSplitter.GridResizeDirection.cs" />
+		<Compile Include="System.Windows.Controls\GridSplitter\GridSplitter.ResizeBehavior.cs" />
+		<Compile Include="System.Windows.Controls\GridSplitter\GridSplitter.SplitBehavior.cs" />
+		<Compile Include="System.Windows.Controls\GridSplitter\GridSplitter.TestHook.cs" />
+		<Compile Include="System.Windows.Controls\GridSplitter\GridSplitterAutomationPeer.cs" />
+		<Compile Include="System.Windows.Controls\GridSplitter\PreviewControl.cs" />
 		<Compile Include="System.Windows.Controls\ItemsControl.ItemInfo.cs" />
+		<Compile Include="System.Windows.Controls\ItemsControlDragDropTarget.cs" />
+		<Compile Include="System.Windows.Controls\ListBoxDragDropTarget.cs" />
 		<Compile Include="System.Windows.Controls\PasswordBoxView.cs" />
 		<Compile Include="System.Windows.Controls\RichTextBox\INTERNAL_TextContainerRichTextBox.cs" />
 		<Compile Include="System.Windows.Controls\RichTextBox\QuillJs\QuillDeltas.cs" />
@@ -245,9 +259,7 @@
 		<Compile Include="System.Windows.input\StylusPoint.cs" />
 		<Compile Include="System.Windows.input\StylusPointCollection.cs" />
 		<Compile Include="System.Windows.Interop\NavigationStateChangedEventArgs.cs" />
-		<Compile Include="System.Windows.Controls\WORKINPROGRESS\ItemsControlDragDropTarget.cs" />
-		<Compile Include="System.Windows.Controls\WORKINPROGRESS\ListBoxDragDropTarget.cs" />
-		<Compile Include="System.Windows.Controls\WORKINPROGRESS\TreeViewDragDropTarget.cs" />
+		<Compile Include="System.Windows.Controls\TreeViewDragDropTarget.cs" />
 		<Compile Include="System.Windows.Media.Animation\WORKINPROGRESS\EasingPointKeyFrame.cs" />
 		<Compile Include="System.Windows.Media\BrushConverter.cs" />
 		<Compile Include="System.Windows.Media\Color.cs" />
@@ -263,6 +275,7 @@
 		<Compile Include="System.Windows.Navigation\NavigationMode.cs" />
 		<Compile Include="System.Windows.Printing\EndPrintEventArgs.cs" />
 		<Compile Include="System.Windows.Printing\PrintDocument.cs" />
+		<Compile Include="System.Windows.Printing\PrintDocument.PrintOperation.cs" />
 		<Compile Include="System.Windows.Printing\PrintPageEventArgs.cs" />
 		<Compile Include="System.Windows\CornerRadiusConverter.cs" />
 		<Compile Include="System.Windows.input\CursorConverter.cs" />
@@ -352,7 +365,7 @@
 		<Compile Include="System.Windows\TemplateBindingExtension.cs" />
 		<Compile Include="System.Windows\WORKINPROGRESS\CheckAndDownloadUpdateCompletedEventArgs.cs" />
 		<Compile Include="System.Windows\WORKINPROGRESS\FontCapitals.cs" />
-		<Compile Include="System.Windows\WORKINPROGRESS\FontStretches.cs" />
+		<Compile Include="System.Windows\FontStretches.cs" />
 		<Compile Include="System.Windows\WORKINPROGRESS\NotificationWindow.cs" />
 		<Compile Include="System.Windows\WORKINPROGRESS\WebRequestCreator.cs" />
 		<Compile Include="System.Windows\IntExtensions.cs" />
@@ -387,7 +400,6 @@
 		<Compile Include="System.Windows.Controls\WORKINPROGRESS\ContentChangedEventHandler.cs" />
 		<Compile Include="System.Windows.Controls\WORKINPROGRESS\DatePicker.cs" />
 		<Compile Include="System.Windows.Controls\WORKINPROGRESS\Grid.cs" />
-		<Compile Include="System.Windows.Controls\WORKINPROGRESS\GridSplitter.cs" />
 		<Compile Include="System.Windows.Controls\HeaderedItemsControl.cs" />
 		<Compile Include="System.Windows.Controls\ITimeFormat.cs" />
 		<Compile Include="System.Windows.Controls\IDefinitionBase.cs" />
@@ -549,15 +561,15 @@
 		<Compile Include="System.Windows.Interop\WORKINPROGRESS\Settings.cs" />
 		<Compile Include="System.Windows.Interop\WORKINPROGRESS\SilverlightHost.cs" />
 		<Compile Include="System.Windows.Markup\XamlReader.cs" />
-		<Compile Include="System.Windows.Media\WORKINPROGRESS\AlignmentX.cs" />
-		<Compile Include="System.Windows.Media\WORKINPROGRESS\AlignmentY.cs" />
+		<Compile Include="System.Windows.Media\AlignmentX.cs" />
+		<Compile Include="System.Windows.Media\AlignmentY.cs" />
 		<Compile Include="System.Windows.Media\WORKINPROGRESS\CompositionTarget.cs" />
 		<Compile Include="System.Windows.Media\WORKINPROGRESS\Fonts.cs" />
 		<Compile Include="System.Windows.Media\WORKINPROGRESS\GlyphTypeface.cs" />
-		<Compile Include="System.Windows.Media\WORKINPROGRESS\ImageBrush.cs" />
+		<Compile Include="System.Windows.Media\ImageBrush.cs" />
 		<Compile Include="System.Windows.Media\WORKINPROGRESS\Matrix3DProjection.cs" />
 		<Compile Include="System.Windows.Media\WORKINPROGRESS\PlaneProjection.cs" />
-		<Compile Include="System.Windows.Media\WORKINPROGRESS\TileBrush.cs" />
+		<Compile Include="System.Windows.Media\TileBrush.cs" />
 		<Compile Include="System.Windows.Media\WORKINPROGRESS\Typeface.cs" />
 		<Compile Include="System.Windows.Media.Animation\WORKINPROGRESS\DiscreteDoubleKeyFrame.cs" />
 		<Compile Include="System.Windows.Media.Animation\WORKINPROGRESS\LinearDoubleKeyFrame.cs" />
@@ -712,7 +724,6 @@
 		<Compile Include="System.Windows.Markup\MethodToTranslateXamlValueToCSharpAttribute.cs" />
 		<Compile Include="System.Windows.Markup\StaticResourceExtension.cs" />
 		<Compile Include="System.Windows.Markup\ThemeResourceExtension.cs" />
-		<Compile Include="System.Windows.Markup\XamlParseException.cs" />
 		<Compile Include="System.Windows.Markup\XmlLanguage.cs" />
 		<Compile Include="System.Windows.Markup\XmlLanguageConverter.cs" />
 		<Compile Include="System.Windows.Media.Effects\DropShadowEffect.cs" />
@@ -823,16 +834,8 @@
 		<Compile Include="System.Windows.Controls\Expander.cs" />
 		<Compile Include="System.Windows.Controls\ExtendedRoutedEventArgs.cs" />
 		<Compile Include="System.Windows.Controls\Grid.cs" />
-		<Compile Include="System.Windows.Controls\GridSplitter.cs" />
-		<Compile Include="System.Windows.Controls\GridSplitter.Data.cs" />
-		<Compile Include="System.Windows.Controls\GridSplitter.Events.cs" />
-		<Compile Include="System.Windows.Controls\GridSplitter.Helper.cs" />
-		<Compile Include="System.Windows.Controls\GridSplitter.Options.cs" />
-		<Compile Include="System.Windows.Controls\GridSplitterGripper.cs" />
 		<Compile Include="System.Windows.Controls\Grid_CSSVersion.cs" />
-		<Compile Include="System.Windows.Controls\Grid_InternalCellDefinition.cs" />
 		<Compile Include="System.Windows.Controls\Grid_InternalHelpers.cs" />
-		<Compile Include="System.Windows.Controls\GripperHoverWrapper.cs" />
 		<Compile Include="System.Windows.Controls\HeaderedContentControl.cs" />
 		<Compile Include="System.Windows.Controls\HyperlinkButton.cs" />
 		<Compile Include="System.Windows.Controls\Image.cs" />
@@ -1070,9 +1073,6 @@
 		<Compile Include="System.Windows\GridUnitType.cs" />
 		<Compile Include="System.Windows\HorizontalAlignment.cs" />
 		<Compile Include="System.Windows\Host.cs" />
-		<Compile Include="System.Windows\ICanConvertToCSSValue.cs" />
-		<Compile Include="System.Windows\ICanConvertToCSSValues.cs" />
-		<Compile Include="System.Windows\ICloneOnAnimation.cs" />
 		<Compile Include="System.Windows\IHasAccessToPropertiesWhereItIsUsed.cs" />
 		<Compile Include="System.Windows\MessageBox.cs" />
 		<Compile Include="System.Windows\MessageBoxButton.cs" />
@@ -1119,7 +1119,7 @@
 		<Compile Include="System.Windows\WORKINPROGRESS\ApplicationUnhandledExceptionEventArgs.cs" />
 		<Compile Include="System.Windows\EventTrigger.cs" />
 		<Compile Include="System.Windows\FlowDirection.cs" />
-		<Compile Include="System.Windows\WORKINPROGRESS\FontStretch.cs" />
+		<Compile Include="System.Windows\FontStretch.cs" />
 		<Compile Include="System.Windows\HierarchicalDataTemplate.cs" />
 		<Compile Include="System.Windows\PresentationFrameworkCollection_1.cs" />
 		<Compile Include="System.Windows\TextDecorationCollection.cs" />
@@ -1175,10 +1175,6 @@
 			<SubType>Designer</SubType>
 		</Content>
 		<Content Include="DefaultStyles\INTERNAL_DefaultExpanderStyle.xaml">
-			<Generator>MSBuild:Compile</Generator>
-			<SubType>Designer</SubType>
-		</Content>
-		<Content Include="DefaultStyles\INTERNAL_DefaultGridSplitterStyle.xaml">
 			<Generator>MSBuild:Compile</Generator>
 			<SubType>Designer</SubType>
 		</Content>
@@ -1286,6 +1282,9 @@
     <Content Include="DefaultStyles\INTERNAL_DefaultRichTextBoxStyle.xaml">
       <Generator>MSBuild:Compile</Generator>
     </Content>
+    <Content Include="DefaultStyles\INTERNAL_DefaultGridSplitterStyle.xaml">
+      <Generator>MSBuild:Compile</Generator>
+    </Content>
 	</ItemGroup>
   <ItemGroup>
 	  <None Include="System.Windows.Controls\ListTimePickerPopup.xaml">
@@ -1301,6 +1300,9 @@
 	    <Generator>MSBuild:Compile</Generator>
 	  </None>
 	  <None Include="System.Windows.Controls\TimeUpDown.xaml">
+	    <Generator>MSBuild:Compile</Generator>
+	  </None>
+	  <None Include="System.Windows.Controls\GridSplitter\GridSplitter.xaml">
 	    <Generator>MSBuild:Compile</Generator>
 	  </None>
 	</ItemGroup>

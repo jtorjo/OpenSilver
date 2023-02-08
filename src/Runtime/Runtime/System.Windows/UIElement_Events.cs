@@ -18,13 +18,11 @@ using OpenSilver.Internal;
 
 #if MIGRATION
 using System.Windows.Controls;
-using System.Windows.Controls.Primitives;
 using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Threading;
 #else
 using Windows.UI.Xaml.Controls;
-using Windows.UI.Xaml.Controls.Primitives;
 using Windows.UI.Xaml.Input;
 using Windows.UI.Xaml.Media;
 using Windows.System;
@@ -308,13 +306,7 @@ namespace Windows.UI.Xaml
                         uiElement.AddToEventRoute(route, args);
 
                         // Get element's visual parent
-                        UIElement parent = VisualTreeHelper.GetParent(uiElement) as UIElement;
-                        if (parent == null && uiElement is FrameworkElement fe && fe.Parent is Popup popup && popup.PopupRoot != null)
-                        {
-                            popup.PopupRoot.AddToEventRoute(route, args);
-                        }
-
-                        e = parent;
+                        e = VisualTreeHelper.GetParent(uiElement);
                     }
                 }
             }
@@ -998,42 +990,81 @@ namespace Windows.UI.Xaml
 
         internal virtual object GetFocusTarget() => INTERNAL_OuterDomElement;
 
-        internal void AllowFocusEvents()
-        {
-            object target = GetFocusTarget();
-            if (target != null)
-            {
-                OpenSilver.Interop.ExecuteJavaScriptFastAsync($"document.enableFocus(\"{((INTERNAL_HtmlDomElementReference)target).UniqueIdentifier}\")");
-            }
-        }
-
-        internal void PreventFocusEvents()
-        {
-            object target = GetFocusTarget();
-            if (target != null)
-            {
-                OpenSilver.Interop.ExecuteJavaScriptFastAsync($"document.disableFocus(\"{((INTERNAL_HtmlDomElementReference)target).UniqueIdentifier}\")");
-            }
-        }
-
         #endregion
-
-        internal virtual NativeEventsManager CreateEventsManager()
-        {
-            return new NativeEventsManager(this, this, this, false);
-        }
 
         public virtual void INTERNAL_AttachToDomEvents()
         {
-            _eventsManager = CreateEventsManager();
-            _eventsManager?.AttachEvents();
+            AddEventListeners();
         }
 
         public virtual void INTERNAL_DetachFromDomEvents()
         {
-            NativeEventsManager eventsManager = _eventsManager;
-            _eventsManager = null;
-            eventsManager?.Dispose();
+        }
+
+        internal virtual void AddEventListeners()
+        {
+            NativeEventsHelper.AddEventListeners(this, false);
+        }
+
+        internal virtual void DispatchEvent(object jsEventArg)
+        {
+            NativeEventCallback(this, this, jsEventArg);
+        }
+
+        internal static class NativeEventsHelper
+        {
+            private static JavascriptCallback _globalHandler;
+
+            internal static void AddEventListeners(UIElement uie, bool isFocusable)
+            {
+                EnsureInitialized();
+
+                string sHandler = CSHTML5.INTERNAL_InteropImplementation.GetVariableStringForJS(_globalHandler);
+                if (uie.INTERNAL_OuterDomElement is INTERNAL_HtmlDomElementReference domRef)
+                {
+                    OpenSilver.Interop.ExecuteJavaScriptFastAsync(
+                        $@"document._attachEventListeners(""{domRef.UniqueIdentifier}"", {sHandler}, {(isFocusable ? "true" : "false")})");
+                }
+                else
+                {
+                    string sOuter = CSHTML5.INTERNAL_InteropImplementation.GetVariableStringForJS(uie.INTERNAL_OuterDomElement);
+                    OpenSilver.Interop.ExecuteJavaScriptFastAsync(
+                        $"document._attachEventListeners({sOuter}, {sHandler}, {(isFocusable ? "true" : "false")})");
+                }
+            }
+
+            private static void EnsureInitialized()
+            {
+                if (_globalHandler is not null)
+                {
+                    return;
+                }
+
+                if (OpenSilver.Interop.IsRunningInTheSimulator)
+                {
+                    _globalHandler = JavascriptCallback.Create(new Action<string, object>(NativeEventCallback));
+                }
+                else
+                {
+                    _globalHandler = JavascriptCallback.Create(new Func<string, object, string>((id, jsEventArg) =>
+                    {
+                        NativeEventCallback(id, jsEventArg);
+                        return string.Empty;
+                    }));
+                }
+            }
+
+            private static void NativeEventCallback(string id, object jsEventArg)
+            {
+                UIElement uie = INTERNAL_HtmlDomManager.GetElementById(id);
+                if (uie is null)
+                {
+                    // Consider detaching the event handlers
+                    return;
+                }
+
+                uie.DispatchEvent(jsEventArg);
+            }
         }
     }
 }

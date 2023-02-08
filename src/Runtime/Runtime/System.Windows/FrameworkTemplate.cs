@@ -86,7 +86,7 @@ namespace Windows.UI.Xaml
             }
         }
 
-        [Obsolete("Deprecated. Please use the Template property instead.", true)]
+        [Obsolete(Helper.ObsoleteMemberMessage + " Please use the Template property instead.", true)]
         public void SetMethodToInstantiateFrameworkTemplate(Func<FrameworkElement, TemplateInstance> methodToInstantiateFrameworkTemplate)
         {
             throw new NotSupportedException("Deprecated. Please use the Template property instead.");
@@ -163,7 +163,7 @@ namespace Windows.UI.Xaml
         }
     }
 
-    internal class TemplateContent
+    internal sealed class TemplateContent
     {
         private readonly XamlContext _xamlContext;
         private readonly Func<FrameworkElement, XamlContext, FrameworkElement> _factory;

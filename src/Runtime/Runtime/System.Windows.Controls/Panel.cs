@@ -22,6 +22,7 @@ using System.Threading.Tasks;
 using System.Windows.Markup;
 using CSHTML5.Internal;
 using OpenSilver.Internal.Controls;
+using OpenSilver.Internal;
 
 #if MIGRATION
 using System.Windows.Controls.Primitives;
@@ -156,7 +157,7 @@ namespace Windows.UI.Xaml.Controls
         }
 
         [EditorBrowsable(EditorBrowsableState.Never)]
-        [Obsolete("Use ProgressiveRenderingChunkSize instead.")]
+        [Obsolete(Helper.ObsoleteMemberMessage + " Use ProgressiveRenderingChunkSize instead.")]
         public bool EnableProgressiveRendering
         {
             get => ProgressiveRenderingChunkSize > 0;
@@ -189,15 +190,15 @@ namespace Windows.UI.Xaml.Controls
             }
         }
 
-#region Children Management
+        #region Children Management
 
         internal virtual void OnChildrenReset()
         {
             if (this.INTERNAL_VisualChildrenInformation != null)
             {
-                foreach (var childInfo in this.INTERNAL_VisualChildrenInformation.Select(kp => kp.Value).ToArray())
+                foreach (var oldChild in this.INTERNAL_VisualChildrenInformation.Keys.ToArray())
                 {
-                    INTERNAL_VisualTreeManager.DetachVisualChildIfNotNull(childInfo.INTERNAL_UIElement, this);
+                    INTERNAL_VisualTreeManager.DetachVisualChildIfNotNull(oldChild, this);
                 }
             }
 
@@ -243,7 +244,7 @@ namespace Windows.UI.Xaml.Controls
             INTERNAL_VisualTreeManager.AttachVisualChildIfNotAlreadyAttached(newChild, this, index);
         }
 
-#endregion Children Management
+        #endregion Children Management
 
         /// <summary>
         /// Gets or sets a Brush that is used to fill the panel.
@@ -259,54 +260,28 @@ namespace Windows.UI.Xaml.Controls
         /// </summary>
         public static readonly DependencyProperty BackgroundProperty =
             DependencyProperty.Register(
-                nameof(Background), 
-                typeof(Brush), 
-                typeof(Panel), 
+                nameof(Background),
+                typeof(Brush),
+                typeof(Panel),
                 new PropertyMetadata((object)null)
                 {
-                    GetCSSEquivalent = (instance) =>
-                    {
-                        return new CSSEquivalent()
-                        {
-                            Name = new List<string> { "background", "backgroundColor", "backgroundColorAlpha" },
-                        };
-                    },
                     MethodToUpdateDom = (d, e) =>
                     {
                         var panel = (Panel)d;
-                        if (e is ImageBrush imageBrush)
-                        {
-                            SetImageBrushRelatedBackgroundProperties(panel, imageBrush);
-                        }
-                        UIElement.SetPointerEvents(panel);
+                        _ = RenderBackgroundAsync(panel, (Brush)e);
+                        SetPointerEvents(panel);
                     },
-                    CallPropertyChangedWhenLoadedIntoVisualTree = WhenToCallPropertyChangedEnum.IfPropertyIsSet
                 });
 
-        /// <summary>
-        /// If the Background property of some controls (Panel, Border) is ImageBrush, 
-        /// to visualize similar as SilverLight for varisous Stretch values we need to set
-        /// HTML tag's background-size, background-repeat and background-position values.
-        /// </summary>
-        /// <param name="element">The UIElement to which we are setting background image</param>
-        /// <param name="imageBrush">The ImageBrush</param>
-        internal static void SetImageBrushRelatedBackgroundProperties(UIElement element, ImageBrush imageBrush)
+        internal static async Task RenderBackgroundAsync(UIElement uie, Brush brush)
         {
-            string cssSize = "auto";
-            switch (imageBrush.Stretch)
+            Debug.Assert(uie != null);
+
+            if (uie.INTERNAL_OuterDomElement is not null)
             {
-                case Stretch.Fill: cssSize = "100% 100%"; break;
-                case Stretch.Uniform: cssSize = "contain"; break;
-                case Stretch.UniformToFill: cssSize = "cover"; break;
+                string background = brush is not null ? await brush.GetDataStringAsync(uie) : string.Empty;
+                INTERNAL_HtmlDomManager.GetFrameworkElementOuterStyleForModification(uie).background = background;
             }
-
-            string domUid = ((INTERNAL_HtmlDomElementReference)element.INTERNAL_OuterDomElement).UniqueIdentifier;
-            string backProperties = $"e.style.backgroundSize = \"{cssSize}\";" +
-                "e.style.backgroundRepeat = \"no-repeat\";" +
-                "e.style.backgroundPosition = \"center center\";";
-
-            string javaScriptCodeToExecute = $"var e = document.getElementById(\"{domUid}\");if (e) {{ {backProperties} }};";
-            INTERNAL_SimulatorExecuteJavaScript.ExecuteJavaScriptAsync(javaScriptCodeToExecute);
         }
 
         /// <summary>
@@ -333,6 +308,42 @@ namespace Windows.UI.Xaml.Controls
             }
         }
 
+        private bool VerifyBoundState()
+        {
+            // If the panel becomes "unbound" while attached to a generator, this
+            // method detaches it and makes it really behave like "unbound."  This
+            // can happen because of a style change, a theme change, etc. It returns
+            // the correct "bound" state, after the dust has settled.
+            //
+            // This is really a workaround for a more general problem that the panel
+            // needs to release resources (an event handler) when it is "out of the tree."
+            // Currently, there is no good notification for when this happens.
+
+            bool isItemsHost = ItemsControl.GetItemsOwner(this) != null;
+
+            if (isItemsHost)
+            {
+                if (_itemContainerGenerator == null)
+                {
+                    // Transitioning from being unbound to bound
+                    ClearChildren();
+                }
+
+                return _itemContainerGenerator != null;
+            }
+            else
+            {
+                if (_itemContainerGenerator != null)
+                {
+                    // Transitioning from being bound to unbound
+                    DisconnectFromGenerator();
+                    ClearChildren();
+                }
+
+                return false;
+            }
+        }
+
         private void ConnectToGenerator()
         {
             Debug.Assert(_itemContainerGenerator == null, "Attempted to connect to a generator when Panel._itemContainerGenerator is non-null.");
@@ -356,6 +367,15 @@ namespace Windows.UI.Xaml.Controls
             }
         }
 
+        private void DisconnectFromGenerator()
+        {
+            Debug.Assert(_itemContainerGenerator != null, "Attempted to disconnect from a generator when Panel._itemContainerGenerator is null.");
+
+            _itemContainerGenerator.ItemsChanged -= new ItemsChangedEventHandler(OnItemsChanged);
+            ((IItemContainerGenerator)_itemContainerGenerator).RemoveAll();
+            _itemContainerGenerator = null;
+        }
+
         private void EnsureEmptyChildren(FrameworkElement logicalParent)
         {
             if ((_uiElementCollection == null) || (_uiElementCollection.LogicalParent != logicalParent))
@@ -366,7 +386,7 @@ namespace Windows.UI.Xaml.Controls
                 }
 
                 _uiElementCollection = CreateUIElementCollection(logicalParent);
-                
+
                 if (_uiElementCollection != null && IsLoaded)
                 {
                     _uiElementCollection.CollectionChanged += new NotifyCollectionChangedEventHandler(OnChildrenCollectionChanged);
@@ -438,18 +458,18 @@ namespace Windows.UI.Xaml.Controls
 
         private void OnItemsChanged(object sender, ItemsChangedEventArgs args)
         {
-            //if (VerifyBoundState())
-            //{
-            Debug.Assert(_itemContainerGenerator != null, "Encountered a null _itemContainerGenerator while receiving an ItemsChanged from a generator.");
-
-            bool affectsLayout = OnItemsChangedInternal(sender, args);
-
-            if (affectsLayout)
+            if (VerifyBoundState())
             {
-                // todo
-                InvalidateMeasure();
+                Debug.Assert(_itemContainerGenerator != null, "Encountered a null _itemContainerGenerator while receiving an ItemsChanged from a generator.");
+
+                bool affectsLayout = OnItemsChangedInternal(sender, args);
+
+                if (affectsLayout)
+                {
+                    // todo
+                    InvalidateMeasure();
+                }
             }
-            //}
         }
 
         // This method returns a bool to indicate if or not the panel layout is affected by this collection change
@@ -582,7 +602,6 @@ namespace Windows.UI.Xaml.Controls
             }
         }
 
-
         protected internal override void INTERNAL_OnAttachedToVisualTree()
         {
             base.INTERNAL_OnAttachedToVisualTree();
@@ -601,7 +620,7 @@ namespace Windows.UI.Xaml.Controls
             int chunkSize = ProgressiveRenderingChunkSize;
             int from = 0;
             int to = (chunkSize * 2 > newChildren.Count) ? newChildren.Count : chunkSize; // do not process less number of items than chunk size
-            
+
             while (true)
             {
                 await Task.Delay(1);
@@ -625,7 +644,7 @@ namespace Windows.UI.Xaml.Controls
                 {
                     break;
                 }
-                
+
                 from = to;
                 to += (chunkSize * 2 > remaining) ? remaining : chunkSize;
             }
@@ -667,11 +686,44 @@ namespace Windows.UI.Xaml.Controls
         private static void OnIsItemsHostChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
         {
             Panel panel = (Panel)d;
-            ItemsControl itemsControl = ItemsControl.GetItemsOwner(panel);
+
+            panel.OnIsItemsHostChanged((bool)e.OldValue, (bool)e.NewValue);
+        }
+
+        /// <summary>
+        /// This method is invoked when the IsItemsHost property changes.
+        /// </summary>
+        /// <param name="oldIsItemsHost">The old value of the IsItemsHost property.</param>
+        /// <param name="newIsItemsHost">The new value of the IsItemsHost property.</param>
+        private void OnIsItemsHostChanged(bool oldIsItemsHost, bool newIsItemsHost)
+        {
+            // GetItemsOwner will check IsItemsHost first, so we don't have
+            // to check that IsItemsHost == true before calling it.
+            ItemsControl itemsControl = ItemsControl.GetItemsOwner(this);
+            Panel oldItemsHost = null;
+
             if (itemsControl != null)
             {
-                itemsControl.ItemsHost = panel;
+                // ItemsHost should be the "root" element which has
+                // IsItemsHost = true on it.  In the case of grouping,
+                // IsItemsHost is true on all panels which are generating
+                // content.  Thus, we care only about the panel which
+                // is generating content for the ItemsControl.
+                IItemContainerGenerator generator = itemsControl.ItemContainerGenerator;
+                if (generator != null && generator == generator.GetItemContainerGeneratorForPanel(this))
+                {
+                    oldItemsHost = itemsControl.ItemsHost;
+                    itemsControl.ItemsHost = this;
+                }
             }
+
+            if (oldItemsHost != null && oldItemsHost != this)
+            {
+                // when changing ItemsHost panels, disconnect the old one
+                oldItemsHost.VerifyBoundState();
+            }
+
+            VerifyBoundState();
         }
     }
 }

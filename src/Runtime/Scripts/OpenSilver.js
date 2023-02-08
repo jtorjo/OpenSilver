@@ -36,7 +36,6 @@
     'libs/flatpickr.css',
     'libs/quill.core.css',
     'libs/cshtml5.js',
-    'libs/fastclick.js',
     'libs/velocity.js',
     'libs/flatpickr.js',
     'libs/ResizeSensor.js',
@@ -61,15 +60,16 @@ window.onCallBack = (function () {
                 // if we deal with an array, we need to check
                 // that all the items are primitive types.
                 if (Array.isArray(args)) {
-                    callbackArgs = args;
+                    callbackArgs = [];
                     for (let i = 0; i < args.length; i++) {
                         let itemType = typeof args[i];
-                        if (!(args[i] === null || itemType === 'number' || itemType === 'string' || itemType === 'boolean' ||
+                        if ((args[i] === null || itemType === 'number' || itemType === 'string' || itemType === 'boolean' ||
                             // Check for TypedArray. This is used for reading binary data for FileReader for example
                             (ArrayBuffer.isView(args[i]) && !(args[i] instanceof DataView))
                         )) {
-                            callbackArgs = [];
-                            break;
+                            callbackArgs.push(args[i]);
+                        } else {
+                            callbackArgs.push(undefined);
                         }
                     }
                     break;
@@ -100,21 +100,14 @@ window.onCallBack = (function () {
 })();
 
 window.callJS = function (javaScriptToExecute) {
-    //console.log(javaScriptToExecute);
-
     var result = eval(javaScriptToExecute);
-    //console.log(result);
     var resultType = typeof result;
     if (resultType == 'string' || resultType == 'number' || resultType == 'boolean') {
-        //if (typeof result !== 'undefined' && typeof result !== 'function') {
-        //console.log("supported");
-        return result;
+       return result;
     }
-    else {
-        //console.log("not supported");
-        if (resultType === 'undefined')
-            return "[UNDEFINED]";
-        else
+    else if (result == null) {
+        return null;
+    } else {     
             return result + " [NOT USABLE DIRECTLY IN C#] (" + resultType + ")";
     }
 };
@@ -126,10 +119,9 @@ window.callJSUnmarshalled = function (javaScriptToExecute) {
     if (resultType == 'string' || resultType == 'number' || resultType == 'boolean') {
         return BINDING.js_to_mono_obj(result);
     }
-    else {
-        if (resultType === 'undefined')
-            return BINDING.js_to_mono_obj("[UNDEFINED]");
-        else
+    else if (result == null) {
+        return null;
+    } else {
             return BINDING.js_to_mono_obj(result + " [NOT USABLE DIRECTLY IN C#] (" + resultType + ")");
     }
 }; 

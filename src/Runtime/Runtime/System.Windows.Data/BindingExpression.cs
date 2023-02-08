@@ -13,24 +13,25 @@
 
 using System;
 using System.Diagnostics;
-using CSHTML5.Internal;
-using OpenSilver.Internal.Data;
 using System.ComponentModel;
-using System.Runtime.CompilerServices;
 using System.Collections.Generic;
 using System.Collections;
-using System.Reflection;
 using System.Threading;
 using System.Security;
+using CSHTML5.Internal;
+using OpenSilver.Internal;
+using OpenSilver.Internal.Data;
 
 #if MIGRATION
 using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Media;
+using System.Windows.Common;
 #else
 using Windows.UI.Xaml.Controls;
 using Windows.UI.Xaml.Input;
 using Windows.UI.Xaml.Media;
+using Windows.UI.Xaml.Common;
 #endif
 
 #if MIGRATION
@@ -58,15 +59,19 @@ namespace Windows.UI.Xaml.Data
         internal bool INTERNAL_ForceValidateOnNextSetValue = false;
         internal bool IsUpdating;
         private bool _isAttaching;
-        private IPropertyChangedListener _propertyListener;
         private DynamicValueConverter _dynamicConverter;
         private object _bindingSource;
         private bool _isUpdateOnLostFocus; // True if this binding expression updates on LostFocus
         private bool _needsUpdate; // True if this binding expression has a pending source update
         private FrameworkElement _mentor;
+        private ValidationError _baseValidationError;
+        private List<ValidationError> _notifyDataErrors;
 
-        private DependencyPropertyListener _dataContextListener;
-        private DependencyPropertyListener _cvsListener;
+        private DependencyPropertyChangedListener _targetPropertyListener;
+        private DependencyPropertyChangedListener _dataContextListener;
+        private DependencyPropertyChangedListener _cvsListener;
+        private WeakEventListener<BindingExpression, INotifyDataErrorInfo, DataErrorsChangedEventArgs> _sourceErrorsChangedListener;
+        private WeakEventListener<BindingExpression, INotifyDataErrorInfo, DataErrorsChangedEventArgs> _valueErrorsChangedListener;
         private INotifyDataErrorInfo _dataErrorSource;
         private INotifyDataErrorInfo _dataErrorValue;
 
@@ -86,7 +91,7 @@ namespace Windows.UI.Xaml.Data
             _propertyPathWalker = new PropertyPathWalker(this);
         }
 
-        private void OnDataContextChanged(object sender, IDependencyPropertyChangedEventArgs args)
+        private void OnDataContextChanged(DependencyObject d, DependencyPropertyChangedEventArgs args)
         {
             BindingSource = args.NewValue;
 
@@ -122,7 +127,7 @@ namespace Windows.UI.Xaml.Data
 
             // found this info at: https://msdn.microsoft.com/fr-fr/library/windows/apps/windows.ui.xaml.data.bindingexpression.updatesource.aspx
             // in the remark.
-            if (!IsUpdating && ParentBinding.Mode == BindingMode.TwoWay) 
+            if (!IsUpdating && ParentBinding.Mode == BindingMode.TwoWay)
             {
                 UpdateSourceObject(Target.GetValue(TargetProperty));
             }
@@ -220,7 +225,7 @@ namespace Windows.UI.Xaml.Data
             Target = d;
 
             _isUpdateOnLostFocus = ParentBinding.UpdateSourceTrigger == UpdateSourceTrigger.Default &&
-                (d is TextBox && dp == TextBox.TextProperty || 
+                (d is TextBox && dp == TextBox.TextProperty ||
                  d is PasswordBox && dp == PasswordBox.PasswordProperty);
             if (_isUpdateOnLostFocus)
             {
@@ -245,7 +250,7 @@ namespace Windows.UI.Xaml.Data
             //Listen to changes on the Target if the Binding is TwoWay:
             if (ParentBinding.Mode == BindingMode.TwoWay)
             {
-                _propertyListener = INTERNAL_PropertyStore.ListenToChanged(Target, TargetProperty, UpdateSourceCallback);
+                _targetPropertyListener = new DependencyPropertyChangedListener(Target, TargetProperty, UpdateSourceCallback);
 
                 // If the user wants to force the Validation of the value when the element
                 // is added to the Visual tree, we set a boolean to do it as soon as possible:
@@ -265,36 +270,40 @@ namespace Windows.UI.Xaml.Data
 
             IsAttached = false;
 
-            if (_propertyListener != null)
+            if (_targetPropertyListener != null)
             {
-                _propertyListener.Detach();
-                _propertyListener = null;
+                _targetPropertyListener.Dispose();
+                _targetPropertyListener = null;
             }
 
             if (_dataContextListener != null)
             {
-                _dataContextListener.Source = null;
+                _dataContextListener.Dispose();
                 _dataContextListener = null;
             }
 
             if (ParentBinding.ValidatesOnNotifyDataErrors)
             {
-                if (_dataErrorSource != null)
+                if (_sourceErrorsChangedListener != null)
                 {
-                    _dataErrorSource.ErrorsChanged -= new EventHandler<DataErrorsChangedEventArgs>(OnSourceErrorsChanged);
-                    _dataErrorSource = null;
+                    _sourceErrorsChangedListener.Detach();
+                    _sourceErrorsChangedListener = null;
                 }
 
-                if (_dataErrorValue != null)
+                if (_valueErrorsChangedListener != null)
                 {
-                    _dataErrorValue.ErrorsChanged -= new EventHandler<DataErrorsChangedEventArgs>(OnValueErrorsChanged);
-                    _dataErrorValue = null;
+                    _valueErrorsChangedListener.Detach();
+                    _valueErrorsChangedListener = null;
                 }
+
+                _dataErrorSource = null;
+                _dataErrorValue = null;
             }
 
             BindingSource = null;
             _propertyPathWalker.Update(null);
 
+            UpdateValidationError(null);
             UpdateNotifyDataErrorValidationErrors(null);
 
             if (_isUpdateOnLostFocus)
@@ -312,6 +321,7 @@ namespace Windows.UI.Xaml.Data
         internal void ValueChanged()
         {
             UpdateNotifyDataErrors(_propertyPathWalker.FinalNode.Value);
+            UpdateValidationError(GetBaseValidationError());
 
             Refresh();
         }
@@ -331,23 +341,20 @@ namespace Windows.UI.Xaml.Data
                 {
                     if (_cvsListener != null)
                     {
-                        _cvsListener.Source = null;
+                        _cvsListener.Dispose();
                         _cvsListener = null;
                     }
 
                     if (value is CollectionViewSource cvs)
                     {
-                        _cvsListener = new DependencyPropertyListener(CollectionViewSource.ViewProperty, OnCollectionViewSourceViewChanged)
-                        {
-                            Source = cvs,
-                        };
+                        _cvsListener = new DependencyPropertyChangedListener(cvs, CollectionViewSource.ViewProperty, OnCollectionViewSourceViewChanged);
                         _bindingSource = cvs.View;
                     }
                 }
             }
         }
 
-        private void OnCollectionViewSourceViewChanged(object sender, IDependencyPropertyChangedEventArgs args)
+        private void OnCollectionViewSourceViewChanged(DependencyObject d, DependencyPropertyChangedEventArgs args)
         {
             _bindingSource = args.NewValue;
 
@@ -376,31 +383,43 @@ namespace Windows.UI.Xaml.Data
 
             if (source != _dataErrorSource)
             {
-                if (_dataErrorSource != null)
+                if (_sourceErrorsChangedListener != null)
                 {
-                    _dataErrorSource.ErrorsChanged -= new EventHandler<DataErrorsChangedEventArgs>(OnSourceErrorsChanged);
+                    _sourceErrorsChangedListener.Detach();
+                    _sourceErrorsChangedListener = null;
                 }
 
                 _dataErrorSource = source as INotifyDataErrorInfo;
 
                 if (_dataErrorSource != null)
                 {
-                    _dataErrorSource.ErrorsChanged += new EventHandler<DataErrorsChangedEventArgs>(OnSourceErrorsChanged);
+                    _sourceErrorsChangedListener = new(this, _dataErrorSource)
+                    {
+                        OnEventAction = static (instance, source, args) => instance.OnSourceErrorsChanged(source, args),
+                        OnDetachAction = static (listener, source) => source.ErrorsChanged -= listener.OnEvent,
+                    };
+                    _dataErrorSource.ErrorsChanged += _sourceErrorsChangedListener.OnEvent;
                 }
             }
 
             if (value != DependencyProperty.UnsetValue && value != _dataErrorValue)
             {
-                if (_dataErrorValue != null)
+                if (_valueErrorsChangedListener != null)
                 {
-                    _dataErrorValue.ErrorsChanged -= new EventHandler<DataErrorsChangedEventArgs>(OnValueErrorsChanged);
+                    _valueErrorsChangedListener.Detach();
+                    _valueErrorsChangedListener = null;
                 }
 
                 _dataErrorValue = value as INotifyDataErrorInfo;
 
                 if (_dataErrorValue != null)
                 {
-                    _dataErrorValue.ErrorsChanged += new EventHandler<DataErrorsChangedEventArgs>(OnValueErrorsChanged);
+                    _valueErrorsChangedListener = new(this, _dataErrorValue)
+                    {
+                        OnEventAction = static (instance, source, args) => instance.OnValueErrorsChanged(source, args),
+                        OnDetachAction = static (listener, source) => source.ErrorsChanged -= listener.OnEvent,
+                    };
+                    _dataErrorValue.ErrorsChanged += _valueErrorsChangedListener.OnEvent;
                 }
             }
 
@@ -414,8 +433,7 @@ namespace Windows.UI.Xaml.Data
             }
             catch (Exception ex)
             {
-                if (ex is StackOverflowException || ex is OutOfMemoryException ||
-                    ex is ThreadAbortException || ex is SecurityException)
+                if (CriticalExceptions.IsCriticalApplicationException(ex))
                 {
                     throw;
                 }
@@ -475,35 +493,136 @@ namespace Windows.UI.Xaml.Data
             return list1;
         }
 
-        private void UpdateNotifyDataErrorValidationErrors(List<object> errors)
+        internal void UpdateValidationError(ValidationError validationError)
         {
-            if (errors == null || errors.Count == 0)
+            // the steps are carefully ordered to avoid going through a "no error"
+            // state while replacing one error with another
+            ValidationError oldValidationError = _baseValidationError;
+
+            _baseValidationError = validationError;
+
+            if (validationError != null)
             {
-                Validation.ClearInvalid(this);
-                return;
+                AddValidationError(validationError);
             }
 
-            foreach (object error in errors)
+            if (oldValidationError != null)
             {
-                if (error != null)
+                RemoveValidationError(oldValidationError);
+            }
+        }
+
+        private void UpdateNotifyDataErrorValidationErrors(List<object> errors)
+        {
+            List<object> toAdd;
+            List<ValidationError> toRemove;
+
+            GetValidationDelta(_notifyDataErrors, errors, out toAdd, out toRemove);
+
+            // add the new errors, then remove the old ones - this avoid a transient
+            // "no error" state
+            if (toAdd != null && toAdd.Count > 0)
+            {
+                List<ValidationError> notifyDataErrors = _notifyDataErrors;
+
+                if (notifyDataErrors == null)
                 {
-                    Validation.MarkInvalid(this, new ValidationError(this) { ErrorContent = error });
+                    notifyDataErrors = new List<ValidationError>();
+                    _notifyDataErrors = notifyDataErrors;
+                }
+
+                foreach (object o in toAdd)
+                {
+                    ValidationError veAdd = new ValidationError(this) { ErrorContent = o };
+                    notifyDataErrors.Add(veAdd);
+                    AddValidationError(veAdd);
+                }
+            }
+
+            if (toRemove != null && toRemove.Count > 0)
+            {
+                List<ValidationError> notifyDataErrors = _notifyDataErrors;
+                foreach (ValidationError veRemove in toRemove)
+                {
+                    notifyDataErrors.Remove(veRemove);
+                    RemoveValidationError(veRemove);
+                }
+
+                if (notifyDataErrors.Count == 0)
+                {
+                    _notifyDataErrors = null;
                 }
             }
         }
 
+        private static void GetValidationDelta(List<ValidationError> previousErrors,
+            List<object> errors,
+            out List<object> toAdd,
+            out List<ValidationError> toRemove)
+        {
+            // determine the errors to add and the validation results to remove,
+            // taking duplicates into account
+            if (previousErrors == null || previousErrors.Count == 0)
+            {
+                toAdd = errors;
+                toRemove = null;
+            }
+            else if (errors == null || errors.Count == 0)
+            {
+                toAdd = null;
+                toRemove = new List<ValidationError>(previousErrors);
+            }
+            else
+            {
+                toAdd = new List<object>();
+                toRemove = new List<ValidationError>(previousErrors);
+
+                for (int i = errors.Count - 1; i >= 0; --i)
+                {
+                    object errorContent = errors[i];
+
+                    int j;
+                    for (j = toRemove.Count - 1; j >= 0; --j)
+                    {
+                        if (ItemsControl.EqualsEx(toRemove[j].ErrorContent, errorContent))
+                        {
+                            // this error appears on both lists - remove it from toRemove
+                            toRemove.RemoveAt(j);
+                            break;
+                        }
+                    }
+
+                    if (j < 0)
+                    {
+                        // this error didn't appear on toRemove - add it to toAdd
+                        toAdd.Add(errorContent);
+                    }
+                }
+            }
+        }
+
+        private void AddValidationError(ValidationError validationError)
+        {
+            // add the error to the target element
+            Validation.AddValidationError(validationError, Target, ParentBinding.NotifyOnValidationError);
+        }
+
+        private void RemoveValidationError(ValidationError validationError)
+        {
+            // remove the error from the target element
+            Validation.RemoveValidationError(validationError, Target, ParentBinding.NotifyOnValidationError);
+        }
+
         private void OnSourceErrorsChanged(object sender, DataErrorsChangedEventArgs e)
         {
-            if (e.PropertyName == _propertyPathWalker.FirstNode.PropertyName)
+            if (e.PropertyName == _propertyPathWalker.FinalNode.PropertyName)
             {
-                UpdateNotifyDataErrors((INotifyDataErrorInfo)sender, e.PropertyName, DependencyProperty.UnsetValue);
+                UpdateNotifyDataErrors(_dataErrorSource, e.PropertyName, DependencyProperty.UnsetValue);
             }
         }
 
         private void OnValueErrorsChanged(object sender, DataErrorsChangedEventArgs e)
-        {
-            UpdateNotifyDataErrors(DependencyProperty.UnsetValue);
-        }
+            => UpdateNotifyDataErrors(DependencyProperty.UnsetValue);
 
         internal void OnSourceAvailable(bool lastAttempt)
         {
@@ -568,16 +687,6 @@ namespace Windows.UI.Xaml.Data
             UpdateSourceObject(value);
         }
 
-        private static bool IsValueValidForSourceUpdate(object value, Type type)
-        {
-            if (value == null)
-            {
-                return !type.IsValueType || (type.IsGenericType && type.GetGenericTypeDefinition() == NullableType);
-            }
-            
-            return type.IsAssignableFrom(value.GetType());
-        }
-
         internal void UpdateSourceObject(object value)
         {
             if (_propertyPathWalker.IsPathBroken)
@@ -588,6 +697,8 @@ namespace Windows.UI.Xaml.Data
 
             object convertedValue = value;
             Type expectedType = node.Type;
+
+            ValidationError vError = null;
 
             try
             {
@@ -603,7 +714,7 @@ namespace Windows.UI.Xaml.Data
                         return;
                 }
 
-                if (!IsValueValidForSourceUpdate(convertedValue, expectedType))
+                if (!IsValidValue(convertedValue, expectedType))
                 {
                     IsUpdating = true;
 
@@ -614,33 +725,68 @@ namespace Windows.UI.Xaml.Data
 #endif
 
                     if (convertedValue == DependencyProperty.UnsetValue)
-                        return;                    
+                        return;
                 }
 
-                // clearing invalid stuff first as node.SetValue triggers the INotifyDataErrorInfo.ErrorsChanged event
-                Validation.ClearInvalid(this);
                 node.SetValue(convertedValue);
             }
-            catch (Exception e)
+            catch (Exception ex)
             {
-                //If we have ValidatesOnExceptions set to true, we display a popup with the error close to the element.
+                ex = CriticalExceptions.Unwrap(ex);
+                if (CriticalExceptions.IsCriticalApplicationException(ex))
+                {
+                    throw;
+                }
+
                 if (ParentBinding.ValidatesOnExceptions)
                 {
-                    //We get the new Error (which is the innermost exception as far as I know):
-                    Exception currentException = e;
-
-                    while (currentException.InnerException != null)
+                    vError = new ValidationError(this)
                     {
-                        currentException = currentException.InnerException;
-                    }
-
-                    Validation.MarkInvalid(this, new ValidationError(this) { Exception = currentException, ErrorContent = currentException.Message });
+                        Exception = ex,
+                        ErrorContent = ex.Message,
+                    };
                 }
             }
             finally
             {
                 IsUpdating = oldIsUpdating;
             }
+
+            vError ??= GetBaseValidationError();
+            UpdateValidationError(vError);
+        }
+
+        private ValidationError GetBaseValidationError()
+        {
+            if (ParentBinding.ValidatesOnDataErrors &&
+                _propertyPathWalker.FinalNode.Source is IDataErrorInfo dataErrorInfo)
+            {
+                string name = _propertyPathWalker.FinalNode.PropertyName;
+                string error;
+                try
+                {
+                    error = dataErrorInfo[name];
+                }
+                catch (Exception ex)
+                {
+                    if (CriticalExceptions.IsCriticalApplicationException(ex))
+                    {
+                        throw;
+                    }
+
+                    error = null;
+                }
+
+                if (!string.IsNullOrEmpty(error))
+                {
+                    return new ValidationError(this)
+                    {
+                        ErrorContent = error,
+                    };
+                }
+            }
+
+            return null;
         }
 
         private void OnTargetLostFocus(object sender, RoutedEventArgs e)
@@ -677,7 +823,7 @@ namespace Windows.UI.Xaml.Data
 
                 return _dynamicConverter;
             }
-        } 
+        }
 
         private object ConvertValueImplicitly(object value, Type targetType)
         {
@@ -689,14 +835,14 @@ namespace Windows.UI.Xaml.Data
             return UseDynamicConverter(value, targetType);
         }
 
-        private static bool IsValidValue(object value, Type targetType)
+        private static bool IsValidValue(object value, Type type)
         {
-            if (value != null)
+            if (value == null)
             {
-                return targetType.IsAssignableFrom(value.GetType());
+                return !type.IsValueType || (type.IsGenericType && type.GetGenericTypeDefinition() == NullableType);
             }
 
-            return false;
+            return type.IsAssignableFrom(value.GetType());
         }
 
         private object UseDynamicConverter(object value, Type targetType)
@@ -743,7 +889,7 @@ namespace Windows.UI.Xaml.Data
             {
                 value = ConvertValueImplicitly(ParentBinding.FallbackValue, TargetProperty.PropertyType);
             }
-            
+
             if (value == DependencyProperty.UnsetValue)
             {
                 value = GetDefaultValue();
@@ -895,12 +1041,21 @@ namespace Windows.UI.Xaml.Data
                     source = mentor = FrameworkElement.FindMentor(Target);
                 }
 
-                if (_dataContextListener == null)
+                if (_dataContextListener != null)
                 {
-                    _dataContextListener = new DependencyPropertyListener(FrameworkElement.DataContextProperty, OnDataContextChanged);
+                    _dataContextListener.Dispose();
+                    _dataContextListener = null;
                 }
-                _dataContextListener.Source = source;
-                source = _dataContextListener.Value;
+
+                if (source is DependencyObject sourceDO)
+                {
+                    _dataContextListener = new DependencyPropertyChangedListener(sourceDO, FrameworkElement.DataContextProperty, OnDataContextChanged);
+                    source = sourceDO.GetValue(FrameworkElement.DataContextProperty);
+                }
+                else
+                {
+                    Debug.Assert(source is null);
+                }
             }
 
             if (useMentor)
@@ -1010,7 +1165,7 @@ namespace Windows.UI.Xaml.Data
             return null;
         }
 
-        private void UpdateSourceCallback(object sender, IDependencyPropertyChangedEventArgs args)
+        private void UpdateSourceCallback(DependencyObject d, DependencyPropertyChangedEventArgs args)
         {
             try
             {

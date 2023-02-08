@@ -1,16 +1,28 @@
-using CSHTML5.Internal;
+
+/*===================================================================================
+* 
+*   Copyright (c) Userware/OpenSilver.net
+*      
+*   This file is part of the OpenSilver Runtime (https://opensilver.net), which is
+*   licensed under the MIT license: https://opensource.org/licenses/MIT
+*   
+*   As stated in the MIT license, "the above copyright notice and this permission
+*   notice shall be included in all copies or substantial portions of the Software."
+*  
+\*====================================================================================*/
+
 using System;
 using System.Globalization;
 using OpenSilver.Internal;
 using CSHTML5;
+using CSHTML5.Internal;
+
 #if MIGRATION
 using System.Windows.Controls;
-using System.Windows.Media;
 #else
 using Windows.UI.Text;
 using Windows.Foundation;
 using Windows.UI.Xaml.Controls;
-using Windows.UI.Xaml.Media;
 #endif
 
 #if MIGRATION
@@ -21,104 +33,42 @@ namespace Windows.UI.Xaml
 {
     internal interface ITextMeasurementService
     {
-        Size Measure(string text, 
-                     double fontSize, 
-                     FontFamily fontFamily, 
-                     FontStyle style, 
-                     FontWeight weight, 
-                     /*FontStretch stretch,*/ 
-                     TextWrapping wrapping, 
-                     Thickness padding, 
-                     double maxWidth);
-        
         Size MeasureTextBlock(string uid,
-                              TextWrapping wrapping, 
-                              Thickness padding, 
-                              double maxWidth);
-        
+                              string whiteSpace,
+                              string overflowWrap,
+                              Thickness padding,
+                              double maxWidth,
+                              string emptyVal);
+
         void CreateMeasurementText(UIElement parent);
-        
+
         bool IsTextMeasureDivID(string id);
     }
 
     /// <summary>
     /// Measure Text Block width and height from html element.
     /// </summary>
-    internal class TextMeasurementService : ITextMeasurementService
+    internal sealed class TextMeasurementService : ITextMeasurementService
     {
-#if OPENSILVER
-        private INTERNAL_HtmlDomStyleReference textBoxDivStyle;
-#elif BRIDGE
-        private dynamic textBoxDivStyle;
-#endif
-
-        private object textBoxReference;
-        private TextBox associatedTextBox;
-
-#if OPENSILVER
         private INTERNAL_HtmlDomStyleReference textBlockDivStyle;
-#elif BRIDGE
-        private dynamic textBlockDivStyle;
-#endif
-
         private object textBlockReference;
         private TextBlock associatedTextBlock;
 
-
-        private string measureTextBoxElementID;
         private string measureTextBlockElementID;
 
-        private TextWrapping savedTextBlockTextWrapping;
+        private string savedWhiteSpace;
         private Thickness savedTextBlockPadding;
 
         public TextMeasurementService()
         {
-            measureTextBoxElementID = "";
             measureTextBlockElementID = "";
 
-            savedTextBlockTextWrapping = TextWrapping.NoWrap;
+            savedWhiteSpace = "pre";
             savedTextBlockPadding = new Thickness(double.NegativeInfinity);
         }
 
         public void CreateMeasurementText(UIElement parent)
         {
-            // For TextBox
-            if (associatedTextBox != null)
-            {
-                INTERNAL_VisualTreeManager.DetachVisualChildIfNotNull(associatedTextBox, parent);
-            }
-
-            associatedTextBox = new TextBox
-            {
-                // Prevent the TextBox from using an implicit style that could mess up the layout
-                Style = null
-            };
-            INTERNAL_VisualTreeManager.AttachVisualChildIfNotAlreadyAttached(associatedTextBox, parent);
-
-            bool hasMarginDiv = false;
-            if (associatedTextBox.INTERNAL_AdditionalOutsideDivForMargins != null)
-            {
-                hasMarginDiv = true;
-
-                var wrapperDivStyle = INTERNAL_HtmlDomManager.GetDomElementStyleForModification(associatedTextBox.INTERNAL_AdditionalOutsideDivForMargins);
-                wrapperDivStyle.position = "absolute";
-                wrapperDivStyle.visibility = "hidden";
-                wrapperDivStyle.left = "-100000px";
-                wrapperDivStyle.top = "-100000px";
-            }
-
-            textBoxReference = associatedTextBox.INTERNAL_OuterDomElement;
-            textBoxDivStyle = INTERNAL_HtmlDomManager.GetDomElementStyleForModification(textBoxReference);
-            textBoxDivStyle.position = "absolute";
-            textBoxDivStyle.visibility = "hidden";
-            textBoxDivStyle.height = "";
-            textBoxDivStyle.width = "";
-            textBoxDivStyle.borderWidth = "1";
-            textBoxDivStyle.left = hasMarginDiv ? "0px" : "-100000px";
-            textBoxDivStyle.top = hasMarginDiv ? "0px" : "-100000px";
-
-            measureTextBoxElementID = ((INTERNAL_HtmlDomElementReference)textBoxReference).UniqueIdentifier;
-
             // For TextBlock
             if (associatedTextBlock != null)
             {
@@ -132,7 +82,7 @@ namespace Windows.UI.Xaml
             };
             INTERNAL_VisualTreeManager.AttachVisualChildIfNotAlreadyAttached(associatedTextBlock, parent);
 
-            hasMarginDiv = false;
+            bool hasMarginDiv = false;
             if (associatedTextBlock.INTERNAL_AdditionalOutsideDivForMargins != null)
             {
                 hasMarginDiv = true;
@@ -164,98 +114,35 @@ namespace Windows.UI.Xaml
 
         public bool IsTextMeasureDivID(string id)
         {
-            if (measureTextBoxElementID == id || measureTextBlockElementID == id)
-                return true;
-
-            return false;
-        }
-
-        public Size Measure(string text, 
-                            double fontSize, 
-                            FontFamily fontFamily, 
-                            FontStyle style, 
-                            FontWeight weight, 
-                            /*FontStretch stretch,*/ 
-                            TextWrapping wrapping, 
-                            Thickness padding, 
-                            double maxWidth)
-        {
-            //Console.WriteLine($"MeasureTextBox maxWidth {maxWidth}");
-            if (textBoxReference == null)
-            {
-                return new Size();
-            }
-
-            associatedTextBox.Text = String.IsNullOrEmpty(text) ? "A" : text;
-            associatedTextBox.FontFamily = fontFamily;
-            associatedTextBox.FontStyle = style;
-            associatedTextBox.FontWeight = weight;
-            //associatedTextBox.FontStretch = stretch;
-            associatedTextBox.Padding = padding;
-            associatedTextBox.FontSize = fontSize;
-
-            associatedTextBox.TextWrapping = wrapping;
-
-            if (double.IsNaN(maxWidth) || double.IsInfinity(maxWidth))
-            {
-                textBoxDivStyle.width = "";
-                textBoxDivStyle.maxWidth = "";
-            }
-            else
-            {
-                textBoxDivStyle.width = maxWidth.ToString(CultureInfo.InvariantCulture) +"px";
-                textBoxDivStyle.maxWidth = maxWidth.ToString(CultureInfo.InvariantCulture) + "px";
-            }
-
-            // On Simulator, it needs time to get actualwidth and actualheight
-#if OPENSILVER
-            if (CSHTML5.Interop.IsRunningInTheSimulator_WorkAround)
-#elif BRIDGE
-            if (CSHTML5.Interop.IsRunningInTheSimulator)
-#endif
-            {
-                global::System.Threading.Thread.Sleep(20);
-            }
-
-            return new Size(associatedTextBox.ActualWidth + 2, associatedTextBox.ActualHeight);
+            return measureTextBlockElementID == id;
         }
 
         public Size MeasureTextBlock(string uid,
-                                     TextWrapping wrapping, 
-                                     Thickness padding, 
-                                     double maxWidth)
+                                     string whiteSpace,
+                                     string overflowWrap,
+                                     Thickness padding,
+                                     double maxWidth,
+                                     string emptyVal)
         {
             if (textBlockReference == null)
             {
                 return new Size();
             }
 
-            string strTextWrapping = wrapping == TextWrapping.Wrap ? "pre-wrap" : "pre";
             string strPadding = $"{padding.Top.ToInvariantString()}px {padding.Right.ToInvariantString()}px {padding.Bottom.ToInvariantString()}px {padding.Left.ToInvariantString()}px";
-            string strWidth = "";
-            string strMaxWidth = "";
-            if (double.IsNaN(maxWidth) || double.IsInfinity(maxWidth))
-            {
-                strWidth = "";
-                strMaxWidth = "";
-            }
-            else
-            {
-                strWidth = maxWidth.ToInvariantString() + "px";
-                strMaxWidth = maxWidth.ToInvariantString() + "px";
-            }
+            string strMaxWidth = double.IsNaN(maxWidth) || double.IsInfinity(maxWidth) ? string.Empty : $"{maxWidth.ToInvariantString()}px";
 
-            if (savedTextBlockTextWrapping == wrapping)
-                strTextWrapping = "";
+            if (savedWhiteSpace == whiteSpace)
+                whiteSpace = string.Empty;
             else
-                savedTextBlockTextWrapping = wrapping;
+                savedWhiteSpace = whiteSpace;
 
             if (savedTextBlockPadding == padding)
                 strPadding = "";
             else
                 savedTextBlockPadding = padding;
 
-            string javaScriptCodeToExecute = $@"document.measureTextBlock(""{uid}"",""{strTextWrapping}"",""{strPadding}"",""{strWidth}"",""{strMaxWidth}"")";
+            string javaScriptCodeToExecute = $@"document.measureTextBlock(""{uid}"",""{whiteSpace}"",""{overflowWrap}"",""{strPadding}"",""{strMaxWidth}"",""{emptyVal}"")";
             string strTextSize = OpenSilver.Interop.ExecuteJavaScriptString(javaScriptCodeToExecute);
             Size measuredSize;
             int sepIndex = strTextSize != null ? strTextSize.IndexOf('|') : -1;

@@ -14,14 +14,14 @@
 
 
 using CSHTML5.Internal;
-using OpenSilver.Internal.Controls;
 using System;
 using System.Collections;
 using System.Collections.Generic;
 using System.ComponentModel;
-using System.Globalization;
 using System.Threading.Tasks;
 using System.Windows.Markup;
+using OpenSilver.Internal;
+using OpenSilver.Internal.Controls;
 
 #if MIGRATION
 using System.Windows.Media;
@@ -161,7 +161,7 @@ namespace Windows.UI.Xaml.Controls
 
             if (this.BorderBrush == null)
             {
-                INTERNAL_PropertyStore.ApplyCssChanges(null, null, Border.BorderBrushProperty.GetMetadata(typeof(Border)), this);
+                UpdateDomOnBorderBrushChanged(this, null, null);
             }
 
             if (!this.INTERNAL_EnableProgressiveLoading)
@@ -204,18 +204,11 @@ namespace Windows.UI.Xaml.Controls
                 typeof(Border),
                 new PropertyMetadata((object)null)
                 {
-                    GetCSSEquivalent = (instance) => new CSSEquivalent
-                    {
-                        Name = new List<string> { "background", "backgroundColor", "backgroundColorAlpha" },
-                    },
-                    MethodToUpdateDom = (d, e) =>
+                    MethodToUpdateDom2 = (d, oldValue, newValue) =>
                     {
                         var border = (Border)d;
-                        if (e is ImageBrush imageBrush)
-                        {
-                            Panel.SetImageBrushRelatedBackgroundProperties(border, imageBrush);
-                        }
-                        UIElement.SetPointerEvents(border);
+                        _ = Panel.RenderBackgroundAsync(border, (Brush)newValue);
+                        SetPointerEvents(border);
                     },
                 });
 
@@ -238,33 +231,54 @@ namespace Windows.UI.Xaml.Controls
                 typeof(Border),
                 new PropertyMetadata((object)null)
                 {
-                    GetCSSEquivalents = (instance) =>
-                    {
-                        var cssList = new List<CSSEquivalent>();
-                        var brush = ((Border)instance).BorderBrush;
-                        if (brush is LinearGradientBrush)
-                        {
-                            cssList.Add(new CSSEquivalent
-                            {
-                                Name = new List<string> { "border-image-source" },
-                            });
-                            cssList.Add(new CSSEquivalent
-                            {
-                                Name = new List<string> { "border-image-slice" },
-                                Value = (d, value) => { return "1"; },
-                            });
-                        }
-                        else
-                        {
-                            cssList.Add(new CSSEquivalent
-                            {
-                                Name = new List<string> { "borderColor" },
-                                Value = (inst, value) => value ?? "transparent"
-                            });
-                        }
-                        return cssList;
-                    }
+                    MethodToUpdateDom2 = UpdateDomOnBorderBrushChanged,
                 });
+
+        private static void UpdateDomOnBorderBrushChanged(DependencyObject d, object oldValue, object newValue)
+        {
+            var border = (Border)d;
+            var cssStyle = INTERNAL_HtmlDomManager.GetFrameworkElementOuterStyleForModification(border);
+            switch (newValue)
+            {
+                case SolidColorBrush solid:
+                    if (oldValue is GradientBrush)
+                    {
+                        cssStyle.borderImageSource = string.Empty;
+                        cssStyle.borderImageSlice = string.Empty;
+                    }
+                    cssStyle.borderColor = solid.INTERNAL_ToHtmlString();
+                    break;
+
+                case LinearGradientBrush linear:
+                    if (oldValue is SolidColorBrush)
+                    {
+                        cssStyle.borderColor = string.Empty;
+                    }
+                    cssStyle.borderImageSource = linear.INTERNAL_ToHtmlString(border);
+                    cssStyle.borderImageSlice = "1";
+                    break;
+
+                case RadialGradientBrush radial:
+                    if (oldValue is SolidColorBrush)
+                    {
+                        cssStyle.borderColor = string.Empty;
+                    }
+                    cssStyle.borderImageSource = radial.INTERNAL_ToHtmlString(border);
+                    cssStyle.borderImageSlice = "1";
+                    break;
+
+                case null:
+                    cssStyle.borderColor = "transparent";
+                    cssStyle.borderImageSource = string.Empty;
+                    cssStyle.borderImageSlice = string.Empty;
+                    break;
+
+                default:
+                    // ImageBrush and custom brushes are not supported.
+                    // Keep using old brush.
+                    break;
+            }
+        }
 
         /// <summary>
         /// Gets or sets the thickness of the border.
@@ -295,7 +309,7 @@ namespace Windows.UI.Xaml.Controls
             var thickness = (Thickness)newValue;
             domElement.boxSizing = "border-box";
             domElement.borderStyle = "solid"; //todo: see if we should put this somewhere else
-            domElement.borderWidth = $"{thickness.Top.ToString(CultureInfo.InvariantCulture)}px {thickness.Right.ToString(CultureInfo.InvariantCulture)}px {thickness.Bottom.ToString(CultureInfo.InvariantCulture)}px {thickness.Left.ToString(CultureInfo.InvariantCulture)}px";
+            domElement.borderWidth = $"{thickness.Top.ToInvariantString()}px {thickness.Right.ToInvariantString()}px {thickness.Bottom.ToInvariantString()}px {thickness.Left.ToInvariantString()}px";
         }
 
         /// <summary>
@@ -325,7 +339,7 @@ namespace Windows.UI.Xaml.Controls
             var border = (Border)d;
             var cr = (CornerRadius)newValue;
             var domStyle = INTERNAL_HtmlDomManager.GetFrameworkElementOuterStyleForModification(border);
-            domStyle.borderRadius = $"{cr.TopLeft.ToString(CultureInfo.InvariantCulture)}px {cr.TopRight.ToString(CultureInfo.InvariantCulture)}px {cr.BottomRight.ToString(CultureInfo.InvariantCulture)}px {cr.BottomLeft.ToString(CultureInfo.InvariantCulture)}px";
+            domStyle.borderRadius = $"{cr.TopLeft.ToInvariantString()}px {cr.TopRight.ToInvariantString()}px {cr.BottomRight.ToInvariantString()}px {cr.BottomLeft.ToInvariantString()}px";
         }
 
         /// <summary>
@@ -362,7 +376,7 @@ namespace Windows.UI.Xaml.Controls
 
                 // todo: if the container has a padding, add it to the margin
                 styleOfInnerDomElement.boxSizing = "border-box";
-                styleOfInnerDomElement.padding = $"{newPadding.Top.ToString(CultureInfo.InvariantCulture)}px {newPadding.Right.ToString(CultureInfo.InvariantCulture)}px {newPadding.Bottom.ToString(CultureInfo.InvariantCulture)}px {newPadding.Left.ToString(CultureInfo.InvariantCulture)}px";
+                styleOfInnerDomElement.padding = $"{newPadding.Top.ToInvariantString()}px {newPadding.Right.ToInvariantString()}px {newPadding.Bottom.ToInvariantString()}px {newPadding.Left.ToInvariantString()}px";
             }
         }
 

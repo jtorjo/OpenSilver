@@ -209,20 +209,6 @@ document.getElementByIdSafe = function (id) {
     return element;
 }
 
-document.enableFocus = function (id) {
-    const element = document.getElementById(id);
-    if (!element) return;
-    element.onfocus = null;
-}
-
-document.disableFocus = function (id) {
-    const element = document.getElementById(id);
-    if (!element) return;
-    element.onfocus = function (e) {
-        e.target.blur();
-    };
-}
-
 document.setGridCollapsedDuetoHiddenColumn = function (id) {
     const element = document.getElementById(id);
     if (!element)
@@ -232,14 +218,6 @@ document.setGridCollapsedDuetoHiddenColumn = function (id) {
         element.style.overflow = 'visible';
         element.setAttribute('data-isCollapsedDueToHiddenColumn', false);
     }
-}
-
-document.setDisplayTableCell = function (id) {
-    const element = document.getElementById(id);
-    if (!element || element.tagName == 'SPAN')
-        return;
-
-    element.style.display = 'table-cell';
 }
 
 document.getActualWidthAndHeight = function (element) {
@@ -270,15 +248,48 @@ document.createElementSafe = function (tagName, id, parentElement, index) {
     return newElement;
 }
 
-document.createTextBlockElement = function (id, parentElement, whiteSpace) {
+document.createTextBlockElement = function (id, parentElement, wrap) {
     const newElement = document.createElementSafe('div', id, parentElement, -1);
 
     if (newElement) {
-        newElement.style['whiteSpace'] = whiteSpace;
         newElement.style['overflow'] = 'hidden';
         newElement.style['textAlign'] = 'left';
         newElement.style['boxSizing'] = 'border-box';
+        if (wrap) {
+            newElement.style['overflowWrap'] = 'break-word';
+            newElement.style['whiteSpace'] = 'pre-wrap';
+        } else {
+            newElement.style['whiteSpace'] = 'pre';
+        }
     }
+}
+
+document.createPopupRootElement = function (id, rootElement, pointerEvents) {
+    if (!rootElement) return;
+
+    const popupRoot = document.createElement('div');
+    popupRoot.setAttribute('id', id);
+    popupRoot.style.position = 'absolute';
+    popupRoot.style.width = '100%';
+    popupRoot.style.height = '100%';
+    popupRoot.style.overflowX = 'hidden';
+    popupRoot.style.overflowY = 'hidden';
+    popupRoot.style.pointerEvents = pointerEvents;
+    popupRoot.addEventListener('keydown', function (e) {
+        if (e.key === 'Tab') {
+            const focusableElements = document.querySelectorAll(`#${id} [tabindex]:not([tabindex="-1"], [tabindex=""])`);
+            if (focusableElements.length === 0) return;
+            if (!e.shiftKey && e.target === focusableElements[focusableElements.length - 1]) {
+                e.preventDefault();
+                focusableElements[0].focus();
+            } else if (e.shiftKey && e.target === focusableElements[0]) {
+                e.preventDefault();
+                focusableElements[focusableElements.length - 1].focus();
+            }
+        }
+    });
+
+    rootElement.appendChild(popupRoot);
 }
 
 document.createCanvasElement = function (id, parentElement) {
@@ -439,63 +450,52 @@ document._attachEventListeners = function (element, handler, isFocusable) {
     const view = typeof element === 'string' ? document.getElementById(element) : element;
     if (!view || view._eventsStore) return;
 
+    function directEventHandler(e) {
+        handler(this.id, e);
+    }
+
     function bubblingEventHandler(e) {
         if (!e.isHandled) {
             e.isHandled = true;
-            handler(e);
+            handler(this.id, e);
+        }
+    }
+
+    function bubblingHandledEventHandler(e) {
+        if (!e.isHandled) {
+            e.isHandled = true;
+            handler(this.id, e);
+            e.preventDefault();
         }
     }
 
     const store = view._eventsStore = {};
     store.isFocusable = isFocusable;
+    store.enableTouch = isTouchDevice();
 
     view.addEventListener('mousedown', store['mousedown'] = bubblingEventHandler);
-    view.addEventListener('touchstart', store['touchstart'] = bubblingEventHandler, { passive: true });
     view.addEventListener('mouseup', store['mouseup'] = bubblingEventHandler);
-    view.addEventListener('touchend', store['touchend'] = bubblingEventHandler);
     view.addEventListener('mousemove', store['mousemove'] = bubblingEventHandler);
-    view.addEventListener('touchmove', store['touchmove'] = bubblingEventHandler, { passive: true });
     view.addEventListener('wheel', store['wheel'] = bubblingEventHandler, { passive: true });
-    view.addEventListener('mouseenter', store['mouseenter'] = handler);
-    view.addEventListener('mouseleave', store['mouseleave'] = handler);
+    view.addEventListener('mouseenter', store['mouseenter'] = directEventHandler);
+    view.addEventListener('mouseleave', store['mouseleave'] = directEventHandler);
+    if (store.enableTouch) {
+        view.addEventListener('touchstart', store['touchstart'] = bubblingEventHandler, { passive: true });
+        view.addEventListener('touchend', store['touchend'] = bubblingHandledEventHandler);
+        view.addEventListener('touchmove', store['touchmove'] = bubblingEventHandler, { passive: true });
+    }
     if (isFocusable) {
         view.addEventListener('keypress', store['keypress'] = bubblingEventHandler);
         view.addEventListener('input', store['input'] = bubblingEventHandler);
         view.addEventListener('keydown', store['keydown'] = bubblingEventHandler);
         view.addEventListener('keyup', store['keyup'] = bubblingEventHandler);
-        view.addEventListener('focusin', store['focusin'] = bubblingEventHandler);
-        view.addEventListener('focusout', store['focusout'] = bubblingEventHandler);
+        view.addEventListener('focus', store['focus'] = directEventHandler);
+        view.addEventListener('blur', store['blur'] = directEventHandler);
     }
 }
 
-document._removeEventListeners = function (element) {
-    const view = typeof element === 'string' ? document.getElementById(element) : element;
-    if (!view || !view._eventsStore) return;
-
-    const store = view._eventsStore;
-    view.removeEventListener('mousedown', store['mousedown']);
-    view.removeEventListener('touchstart', store['touchstart']);
-    view.removeEventListener('mouseup', store['mouseup']);
-    view.removeEventListener('touchend', store['touchend']);
-    view.removeEventListener('mousemove', store['mousemove']);
-    view.removeEventListener('touchmove', store['touchmove']);
-    view.removeEventListener('wheel', store['wheel']);
-    view.removeEventListener('mouseenter', store['mouseenter']);
-    view.removeEventListener('mouseleave', store['mouseleave']);
-    if (store.isFocusable) {
-        view.removeEventListener('keypress', store['keypress']);
-        view.removeEventListener('input', store['input']);
-        view.removeEventListener('keydown', store['keydown']);
-        view.removeEventListener('keyup', store['keyup']);
-        view.removeEventListener('focusin', store['focusin']);
-        view.removeEventListener('focusout', store['focusout']);
-    }
-
-    delete view._eventsStore;
-}
-
-document.eventCallback = function (callbackId, arguments, sync) {
-    const argsArray = arguments;
+document.eventCallback = function (callbackId, args, sync) {
+    const argsArray = args;
     const idWhereCallbackArgsAreStored = "callback_args_" + document.callbackCounterForSimulator++;
     document.jsObjRef[idWhereCallbackArgsAreStored] = argsArray;
     if (sync) {
@@ -642,42 +642,34 @@ document.setPosition = function (id, left, top, bSetAbsolutePosition, bSetZeroMa
     }
 }
 
-document.measureTextBlock = function (uid, textWrapping, padding, width, maxWidth) {
+document.measureTextBlock = function (uid, whiteSpace, overflowWrap, padding, maxWidth, emptyVal) {
     var element = document.measureTextBlockElement;
     var elToMeasure = document.getElementById(uid);
     if (element && elToMeasure) {
         var computedStyle = getComputedStyle(elToMeasure);
 
-        var runElement = element.firstElementChild;
-        if (runElement != null) {
-            var child = elToMeasure;
-            if (child.hasChildNodes()) {
-                while (child.hasChildNodes()) {
-                    child = child.firstChild;
-                }
-                runElement.innerHTML = child.parentElement.innerHTML.length == 0 ? 'A' : child.parentElement.innerHTML;
-            } else {
-                runElement.innerHTML = 'A';
-            }
-        }
+        element.innerHTML = elToMeasure.innerHTML.length == 0 ? emptyVal : elToMeasure.innerHTML;
 
         element.style.fontSize = computedStyle.fontSize;
         element.style.fontWeight = computedStyle.fontWeight;
         element.style.fontFamily = computedStyle.fontFamily;
         element.style.fontStyle = computedStyle.fontStyle;
 
-        if (textWrapping.length > 0) {
-            element.style.whiteSpace = textWrapping;
-        }
+        if (whiteSpace.length > 0)
+            element.style.whiteSpace = whiteSpace;
+        element.style.overflowWrap = overflowWrap;
         if (padding.length > 0) {
             element.style.boxSizing = "border-box";
             element.style.padding = padding;
         }
 
-        element.style.width = width;
         element.style.maxWidth = maxWidth;
 
-        return element.offsetWidth + "|" + element.offsetHeight;
+        const size = element.offsetWidth + "|" + element.offsetHeight;
+
+        element.innerHTML = '';
+
+        return size;
     }
 
     return "0|0";
@@ -1334,14 +1326,6 @@ if (!Array.from) {
 // INITIALIZE
 //------------------------------
 
-
-window.addEventListener('load', function () {
-    if (typeof FastClick !== 'undefined') {
-        new FastClick(document.body);
-    }
-}, false);
-
-
 var jsilConfig = {
     printStackTrace: false,
     libraryRoot: "Libraries/",
@@ -1377,4 +1361,13 @@ window.elementsFromPointOpensilver = function (x, y, element) {
 
 function PerformHitTest(x, y, rect) {
     return rect.x <= x && x <= rect.x + rect.width && rect.y <= y && y <= rect.y + rect.height;
+}
+
+//------------------------------
+// Just to check if client browser support touch
+//------------------------------
+const isTouchDevice = () => {
+    return (('ontouchstart' in window) ||
+        (navigator.maxTouchPoints > 0) ||
+        (navigator.msMaxTouchPoints > 0));
 }
