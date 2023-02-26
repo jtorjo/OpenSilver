@@ -99,28 +99,8 @@ namespace Windows.UI.Xaml.Controls
             // It is important that the "ContentEditable" div has the same CSS size properties as the outer div, so that the overflow and scrolling work properly:
             if (_contentEditableDiv != null) //this can be true in the case where a template has been defined, in which case we wait for the template to be created before adding the text area.
             {
-                var outerDomStyle = INTERNAL_HtmlDomManager.GetFrameworkElementOuterStyleForModification(this);
                 var contentEditableStyle = INTERNAL_HtmlDomManager.GetDomElementStyleForModification(_contentEditableDiv);
-                if (Host.HorizontalContentAlignment == HorizontalAlignment.Stretch)
-                {
-                    contentEditableStyle.width = "100%";
-                    contentEditableStyle.maxWidth = outerDomStyle.maxWidth;
-                }
-                else //it is top, bottom or center so we don't want to stretch, but we want it to be limited as much as the outerDomElement
-                {
-                    if (double.IsNaN(Width))
-                    {
-                        if (!double.IsNaN(MaxWidth))
-                        {
-                            contentEditableStyle.maxWidth = outerDomStyle.maxWidth;
-                        }//else, neither Width or maxWidth are set so we let it be.
-                    }
-                    else
-                    {
-                        double contentEditableMaxWidth = Math.Max(0, Width - Host.BorderThickness.Left - Host.BorderThickness.Right);
-                        contentEditableStyle.maxWidth = contentEditableMaxWidth.ToInvariantString() + "px";  //note: this might be incorrect as it does not take into consideration any padding, margin, or other elements that happens between outerDomElement and contentEditableDiv.
-                    }
-                }
+                contentEditableStyle.width = Host.TextWrapping == TextWrapping.Wrap ? "100%" : "max-content";
             }
         }
 
@@ -129,27 +109,8 @@ namespace Windows.UI.Xaml.Controls
             // It is important that the "ContentEditable" div has the same CSS size properties as the outer div, so that the overflow and scrolling work properly:
             if (_contentEditableDiv != null) //this can be true in the case where a template has been defined, in which case we wait for the template to be created before adding the text area.
             {
-                var outerDomStyle = INTERNAL_HtmlDomManager.GetFrameworkElementOuterStyleForModification(this);
                 var contentEditableStyle = INTERNAL_HtmlDomManager.GetDomElementStyleForModification(_contentEditableDiv);
-                if (Host.VerticalContentAlignment == VerticalAlignment.Stretch)
-                {
-                    contentEditableStyle.height = "100%";
-                    contentEditableStyle.maxHeight = outerDomStyle.maxHeight;
-                }
-                else
-                {
-                    if (double.IsNaN(Height))
-                    {
-                        if (!double.IsNaN(MaxHeight))
-                        {
-                            contentEditableStyle.maxHeight = outerDomStyle.maxHeight;
-                        }//else, neither Height or maxHeight are set so we let it be.
-                    }
-                    else
-                    {
-                        contentEditableStyle.maxHeight = outerDomStyle.height; //note: this might be incorrect as it does not take into consideration any padding or margin that happens between outerDomElement and contentEditableDiv.
-                    }
-                }
+                contentEditableStyle.height = "max-content";
             }
         }
 
@@ -177,8 +138,7 @@ namespace Windows.UI.Xaml.Controls
 
         internal void OnAcceptsReturnChanged(bool acceptsReturn)
         {
-            if (INTERNAL_VisualTreeManager.IsElementInVisualTree(this) &&
-                INTERNAL_HtmlDomManager.IsNotUndefinedOrNull(_contentEditableDiv))
+            if (INTERNAL_VisualTreeManager.IsElementInVisualTree(this) && _contentEditableDiv != null)
             {
                 //--- SIMULATOR ONLY: ---
                 // Set the "data-accepts-return" property (that we have invented) so that the "keydown" JavaScript event can retrieve this value:
@@ -219,36 +179,25 @@ element.setAttribute(""data-acceptsreturn"", ""{acceptsReturn.ToString().ToLower
             }
         }
 
-        internal void OnTextWrappingChanged(TextWrapping tw)
+        internal void OnTextWrappingChanged(TextWrapping textWrapping)
         {
-            if (INTERNAL_HtmlDomManager.IsNotUndefinedOrNull(_contentEditableDiv))
+            if (_contentEditableDiv != null)
             {
-                switch (tw)
-                {
-                    case TextWrapping.NoWrap:
-                        INTERNAL_HtmlDomManager.GetDomElementStyleForModification(_contentEditableDiv).whiteSpace = "nowrap";
-                        break;
-
-                    case TextWrapping.Wrap:
-                        INTERNAL_HtmlDomManager.GetDomElementStyleForModification(_contentEditableDiv).whiteSpace = "pre-wrap";
-                        //todo: once we find how to make the note work, apply the same thing to the TextBlock.
-                        //Note: the following line would be useful to break the words when they are too long without spaces.
-                        //      unfortunately, it only works in chrome.
-                        //      The other browsers have wordBreak = "break-all" but that doesn't take into account the spaces to break the string.
-                        //          it means it will break words in two when it could have gone to the next line before starting the word that overflows in the line.
-                        //INTERNAL_HtmlDomManager.GetDomElementStyleForModification(textBox._contentEditableDiv).wordBreak = "break-word";
-                        break;
-
-                    default:
-                        break;
-                }
+                ApplyTextWrapping(
+                    INTERNAL_HtmlDomManager.GetDomElementStyleForModification(_contentEditableDiv),
+                    textWrapping);
             }
+        }
+
+        private static void ApplyTextWrapping(INTERNAL_HtmlDomStyleReference cssStyle, TextWrapping textWrapping)
+        {
+            TextBlock.ApplyTextWrapping(cssStyle, textWrapping);
+            cssStyle.width = textWrapping == TextWrapping.Wrap ? "100%" : "max-content";
         }
 
         internal void OnMaxLengthChanged(int maxLength)
         {
-            if (INTERNAL_VisualTreeManager.IsElementInVisualTree(this) && 
-                INTERNAL_HtmlDomManager.IsNotUndefinedOrNull(_contentEditableDiv))
+            if (INTERNAL_VisualTreeManager.IsElementInVisualTree(this) && _contentEditableDiv != null)
             {
                 //--- SIMULATOR ONLY: ---
                 // Set the "data-maxlength" property (that we have made up) so that the "keydown" JavaScript event can retrieve this value:
@@ -399,17 +348,16 @@ sel.setBaseAndExtent(nodesAndOffsets['startParent'], nodesAndOffsets['startOffse
             var contentEditableDivStyle = INTERNAL_HtmlDomManager.CreateDomElementAppendItAndGetStyle("div", parentRef, this, out object contentEditableDiv);
             _contentEditableDiv = contentEditableDiv;
 
-            contentEditableDivStyle.width = "100%";
-            contentEditableDivStyle.height = "100%";
+            contentEditableDivStyle.height = "max-content";
 
             // Apply Host.TextWrapping
-            contentEditableDivStyle.whiteSpace = Host.TextWrapping == TextWrapping.NoWrap ? "nowrap" : "pre-wrap";
+            ApplyTextWrapping(contentEditableDivStyle, Host.TextWrapping);
             contentEditableDivStyle.outline = "solid transparent"; // Note: this is to avoind having the weird border when it has the focus. I could have used outlineWidth = "0px" but or some reason, this causes the caret to not work when there is no text.
             contentEditableDivStyle.background = "solid transparent";
             contentEditableDivStyle.cursor = "text";
 
             // Disable spell check
-            INTERNAL_HtmlDomManager.SetDomElementAttribute(contentEditableDiv, "spellcheck", this.Host.IsSpellCheckEnabled);
+            INTERNAL_HtmlDomManager.SetDomElementAttribute(contentEditableDiv, "spellcheck", Host.IsSpellCheckEnabled);
 
             // Apply TextAlignment
             UpdateTextAlignment(contentEditableDivStyle, Host.TextAlignment);
@@ -418,8 +366,8 @@ sel.setBaseAndExtent(nodesAndOffsets['startParent'], nodesAndOffsets['startOffse
             INTERNAL_HtmlDomManager.SetDomElementAttribute(contentEditableDiv, "contentEditable", isContentEditable);
             this.INTERNAL_OptionalSpecifyDomElementConcernedByMinMaxHeightAndWidth = contentEditableDiv;
 
-            contentEditableDivStyle.minWidth = "14px";
-            contentEditableDivStyle.minHeight = (Math.Floor(this.Host.FontSize * 1.5 * 1000) / 1000).ToInvariantString() + "px"; // Note: We multiply by 1000 and then divide by 1000 so as to only keep 3 decimals at the most. //Note: setting "minHeight" is for FireFox only, because other browsers don't seem to need it. The "1.5" factor is here to ensure that the resulting Height is the same as that of the PasswordBox.
+            contentEditableDivStyle.minWidth = "max(14px, 100%)";
+            contentEditableDivStyle.minHeight = $"max({(Math.Floor(Host.FontSize * 1.5 * 1000) / 1000).ToInvariantString()}px, 100%)";
 
             domElementWhereToPlaceChildren = contentEditableDiv;
 
@@ -584,30 +532,13 @@ element_OutsideEventHandler.addEventListener('paste', function(e) {{
             InvalidateMeasure();
         }
 
-        private static string ScrollBarVisibilityToHtmlString(ScrollBarVisibility scrollVisibility)
-        {
-            switch (scrollVisibility)
-            {
-                case ScrollBarVisibility.Disabled:
-                    return "hidden";
-                case ScrollBarVisibility.Auto:
-                    return "auto";
-                case ScrollBarVisibility.Hidden:
-                    return "hidden";
-                case ScrollBarVisibility.Visible:
-                    return "scroll";
-                default:
-                    return null;
-            }
-        }
-
         protected override Size MeasureOverride(Size availableSize)
         {
             string uniqueIdentifier = ((INTERNAL_HtmlDomElementReference)INTERNAL_OuterDomElement).UniqueIdentifier;
             Size TextSize = Application.Current.TextMeasurementService.MeasureTextBlock(
                 uniqueIdentifier,
                 Host.TextWrapping == TextWrapping.NoWrap ? "pre" : "pre-wrap",
-                string.Empty,
+                Host.TextWrapping == TextWrapping.NoWrap ? string.Empty : "break-word",
                 Margin,
                 availableSize.Width,
                 "M");

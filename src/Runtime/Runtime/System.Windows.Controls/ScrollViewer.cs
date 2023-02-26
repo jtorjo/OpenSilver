@@ -12,16 +12,19 @@
 \*====================================================================================*/
 
 using System;
+using System.Windows.Input;
 using CSHTML5.Internal;
 
 #if MIGRATION
 using System.Windows.Automation.Peers;
 using System.Windows.Controls.Primitives;
-using System.Windows.Input;
 #else
 using Windows.UI.Xaml.Automation.Peers;
 using Windows.UI.Xaml.Controls.Primitives;
 using Windows.UI.Xaml.Input;
+using KeyEventArgs = Windows.UI.Xaml.Input.KeyRoutedEventArgs;
+using Key = Windows.System.VirtualKey;
+using ModifierKeys = Windows.System.VirtualKeyModifiers;
 #endif
 
 #if MIGRATION
@@ -133,21 +136,16 @@ namespace Windows.UI.Xaml.Controls
         {
             get
             {
-                if (this.IsCustomLayoutRoot || this.IsUnderCustomLayout)
+                if (CustomLayout || IsUnderCustomLayout)
                 {
                     return (double)GetValue(HorizontalOffsetProperty);
                 }
 
                 // Note: we did not create a DependencyProperty because we do not want to slow down the scroll by calling SetValue during the scroll.
-                if (INTERNAL_VisualTreeManager.IsElementInVisualTree(this))
+                if (INTERNAL_VisualTreeManager.IsElementInVisualTree(this) && INTERNAL_OuterDomElement != null)
                 {
-                    try
-                    {
-                        _horizontalOffset = OpenSilver.Interop.ExecuteJavaScriptDouble($"{CSHTML5.INTERNAL_InteropImplementation.GetVariableStringForJS(INTERNAL_OuterDomElement)}['scrollLeft']");
-                    }
-                    catch (InvalidCastException)
-                    {
-                    }
+                    string sDomElement = CSHTML5.INTERNAL_InteropImplementation.GetVariableStringForJS(INTERNAL_OuterDomElement);
+                    _horizontalOffset = OpenSilver.Interop.ExecuteJavaScriptDouble($"{sDomElement}.scrollLeft");
                 }
                 return _horizontalOffset;
             }
@@ -157,10 +155,12 @@ namespace Windows.UI.Xaml.Controls
         /// <summary>
         /// Identifies the <see cref="HorizontalOffset"/> dependency property.
         /// </summary>
-        /// <returns>The identifier for the <see cref="HorizontalOffset"/> dependency property.</returns>
-        public static readonly DependencyProperty HorizontalOffsetProperty = DependencyProperty.Register(
-            "HorizontalOffset", typeof(double), typeof(ScrollViewer),
-            new PropertyMetadata(new PropertyChangedCallback(OnScrollInfoDependencyPropertyChanged)));
+        public static readonly DependencyProperty HorizontalOffsetProperty =
+            DependencyProperty.Register(
+                nameof(HorizontalOffset),
+                typeof(double),
+                typeof(ScrollViewer),
+                new PropertyMetadata(0.0, OnScrollInfoDependencyPropertyChanged));
 
         /// <summary>
         /// Gets or sets a value that indicates whether a horizontal <see cref="ScrollBar"/> should be displayed.
@@ -175,16 +175,29 @@ namespace Windows.UI.Xaml.Controls
         /// <summary>
         /// Identifies the <see cref="HorizontalScrollBarVisibility"/> dependency property.
         /// </summary>
-        /// <returns>The identifier for the <see cref="HorizontalScrollBarVisibility"/> dependency property.</returns>
         public static readonly DependencyProperty HorizontalScrollBarVisibilityProperty =
             DependencyProperty.RegisterAttached(
                 nameof(HorizontalScrollBarVisibility),
                 typeof(ScrollBarVisibility),
                 typeof(ScrollViewer),
-                new FrameworkPropertyMetadata(ScrollBarVisibility.Disabled, FrameworkPropertyMetadataOptions.AffectsMeasure | FrameworkPropertyMetadataOptions.AffectsArrange)
+                new PropertyMetadata(ScrollBarVisibility.Disabled, OnScrollBarVisibilityChanged)
                 {
                     MethodToUpdateDom2 = UpdateDomOnHSBVisibilityChanged,
                 });
+
+        private static void OnScrollBarVisibilityChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
+        {
+            if (d is ScrollViewer scrollViewer)
+            {
+                scrollViewer.InvalidateMeasure();
+                if (scrollViewer.ScrollInfo != null)
+                {
+                    scrollViewer.ScrollInfo.CanHorizontallyScroll = scrollViewer.HorizontalScrollBarVisibility != ScrollBarVisibility.Disabled;
+                    scrollViewer.ScrollInfo.CanVerticallyScroll = scrollViewer.VerticalScrollBarVisibility != ScrollBarVisibility.Disabled;
+                }
+                scrollViewer.UpdateScrollbarVisibility();
+            }
+        }
 
         private static void UpdateDomOnHSBVisibilityChanged(DependencyObject d, object oldValue, object newValue)
         {
@@ -208,22 +221,18 @@ namespace Windows.UI.Xaml.Controls
         {
             get
             {
-                if (this.IsCustomLayoutRoot || this.IsUnderCustomLayout)
+                if (CustomLayout || IsUnderCustomLayout)
                 {
                     return (double)GetValue(VerticalOffsetProperty);
                 }
 
                 // Note: we did not create a DependencyProperty because we do not want to slow down the scroll by calling SetValue during the scroll.
-                if (INTERNAL_VisualTreeManager.IsElementInVisualTree(this))
+                if (INTERNAL_VisualTreeManager.IsElementInVisualTree(this) && INTERNAL_OuterDomElement != null)
                 {
-                    try
-                    {
-                        _verticalOffset = OpenSilver.Interop.ExecuteJavaScriptDouble($@"{CSHTML5.INTERNAL_InteropImplementation.GetVariableStringForJS(INTERNAL_OuterDomElement)}['scrollTop']");
-                    }
-                    catch (InvalidCastException)
-                    {
-                    }
+                    string sDomElement = CSHTML5.INTERNAL_InteropImplementation.GetVariableStringForJS(INTERNAL_OuterDomElement);
+                    _verticalOffset = OpenSilver.Interop.ExecuteJavaScriptDouble($"{sDomElement}.scrollTop");
                 }
+
                 return _verticalOffset;
             }
             private set { SetValue(VerticalOffsetProperty, value); }
@@ -232,10 +241,12 @@ namespace Windows.UI.Xaml.Controls
         /// <summary>
         /// Identifies the <see cref="VerticalOffset"/> dependency property.
         /// </summary>
-        /// <returns>The identifier for the <see cref="VerticalOffset"/> dependency property.</returns>
-        public static readonly DependencyProperty VerticalOffsetProperty = DependencyProperty.Register(
-            "VerticalOffset", typeof(double), typeof(ScrollViewer),
-            new PropertyMetadata(new PropertyChangedCallback(OnScrollInfoDependencyPropertyChanged)));
+        public static readonly DependencyProperty VerticalOffsetProperty =
+            DependencyProperty.Register(
+                nameof(VerticalOffset),
+                typeof(double),
+                typeof(ScrollViewer),
+                new PropertyMetadata(0.0, OnScrollInfoDependencyPropertyChanged));
 
         /// <summary>
         /// Gets or sets a value that indicates whether a vertical <see cref="ScrollBar"/> should be displayed.
@@ -250,13 +261,12 @@ namespace Windows.UI.Xaml.Controls
         /// <summary>
         /// Identifies the <see cref="VerticalScrollBarVisibility"/> dependency property.
         /// </summary>
-        /// <returns>The identifier for the <see cref="VerticalScrollBarVisibility"/> dependency property.</returns>
         public static readonly DependencyProperty VerticalScrollBarVisibilityProperty =
             DependencyProperty.RegisterAttached(
                 nameof(VerticalScrollBarVisibility),
                 typeof(ScrollBarVisibility),
                 typeof(ScrollViewer),
-                new FrameworkPropertyMetadata(ScrollBarVisibility.Visible, FrameworkPropertyMetadataOptions.AffectsMeasure)
+                new PropertyMetadata(ScrollBarVisibility.Visible, OnScrollBarVisibilityChanged)
                 {
                     MethodToUpdateDom2 = UpdateDomOnVSBVisibilityChanged
                 });
@@ -294,7 +304,7 @@ namespace Windows.UI.Xaml.Controls
             }
 
             var innerDivStyle = INTERNAL_HtmlDomManager.CreateDomElementAppendItAndGetStyle("div", outerDiv, this, out object innerDiv);
-            innerDivStyle.display = "table";
+            innerDivStyle.display = "block";
             innerDivStyle.height = "100%";
             innerDivStyle.width = "100%";
 
@@ -611,59 +621,152 @@ namespace Windows.UI.Xaml.Controls
             }
         }
 
+        /// <summary> 
+        /// Scrolls the view in the specified direction.
+        /// </summary> 
+        /// <param name="key">Key corresponding to the direction.</param>
+        /// <remarks>Similar to WPF's corresponding ScrollViewer method.</remarks>
+        internal void ScrollInDirection(Key key)
+        {
+            if (ScrollInfo != null)
+            {
+                switch (key)
+                {
+                    case Key.Up:
+                        ScrollInfo.LineUp();
+                        break;
+                    case Key.Down:
+                        ScrollInfo.LineDown();
+                        break;
+                    case Key.Left:
+                        ScrollInfo.LineLeft();
+                        break;
+                    case Key.Right:
+                        ScrollInfo.LineRight();
+                        break;
+                }
+            }
+        }
+
         /// <summary>
         /// Identifies the <see cref="ScrollableHeight"/> dependency property.
         /// </summary>
-        /// <returns>The identifier for the <see cref="ScrollableHeight"/> dependency property.</returns>
-        public static readonly DependencyProperty ScrollableHeightProperty = DependencyProperty.Register("ScrollableHeight", typeof(double), typeof(ScrollViewer), null);
+        public static readonly DependencyProperty ScrollableHeightProperty =
+            DependencyProperty.Register(
+                nameof(ScrollableHeight),
+                typeof(double),
+                typeof(ScrollViewer),
+                new PropertyMetadata(0.0));
 
         /// <summary>
-        /// Gets a value that represents the vertical size of the area that can be scrolled; the difference between the height of the extent and the height of the viewport.
+        /// Gets a value that represents the vertical size of the area that can be scrolled;
+        /// the difference between the height of the extent and the height of the viewport.
         /// </summary>
-        /// <returns>The vertical size of the area that can be scrolled. This property has no default value.</returns>
+        /// <returns>
+        /// The vertical size of the area that can be scrolled. This property has no default value.
+        /// </returns>
         public double ScrollableHeight
         {
-            get { return (double)this.GetValue(ScrollableHeightProperty); }
-            private set { this.SetValue(ScrollableHeightProperty, value); }
+            get
+            {
+                if (CustomLayout || IsUnderCustomLayout)
+                {
+                    return (double)GetValue(ScrollableHeightProperty);
+                }
+
+                if (INTERNAL_VisualTreeManager.IsElementInVisualTree(this) && INTERNAL_OuterDomElement != null)
+                {
+                    string sDomElement = CSHTML5.INTERNAL_InteropImplementation.GetVariableStringForJS(INTERNAL_OuterDomElement);
+                    return OpenSilver.Interop.ExecuteJavaScriptDouble($"{sDomElement}.scrollHeight - {sDomElement}.clientHeight");
+                }
+
+                return 0.0;
+            }
+            private set { SetValue(ScrollableHeightProperty, value); }
         }
 
         /// <summary>
         /// Identifies the <see cref="ScrollableWidth"/> dependency property.
         /// </summary>
-        /// <returns>The identifier for the <see cref="ScrollableWidth"/> dependency property.</returns>
-        public static readonly DependencyProperty ScrollableWidthProperty = DependencyProperty.Register("ScrollableWidth", typeof(double), typeof(ScrollViewer), null);
+        public static readonly DependencyProperty ScrollableWidthProperty =
+            DependencyProperty.Register(
+                nameof(ScrollableWidth),
+                typeof(double),
+                typeof(ScrollViewer),
+                new PropertyMetadata(0.0));
 
         /// <summary>
-        /// Gets a value that represents the horizontal size of the area that can be scrolled; the difference between the width of the extent and the width of the viewport.
+        /// Gets a value that represents the horizontal size of the area that can be scrolled;
+        /// the difference between the width of the extent and the width of the viewport.
         /// </summary>
-        /// <returns>The horizontal size of the area that can be scrolled. This property has no default value.</returns>
+        /// <returns>
+        /// The horizontal size of the area that can be scrolled. This property has no default value.
+        /// </returns>
         public double ScrollableWidth
         {
-            get { return (double)this.GetValue(ScrollableWidthProperty); }
-            private set { this.SetValue(ScrollableWidthProperty, value); }
+            get
+            {
+                if (CustomLayout || IsUnderCustomLayout)
+                {
+                    return (double)GetValue(ScrollableWidthProperty);
+                }
+
+                if (INTERNAL_VisualTreeManager.IsElementInVisualTree(this) && INTERNAL_OuterDomElement != null)
+                {
+                    string sDomElement = CSHTML5.INTERNAL_InteropImplementation.GetVariableStringForJS(INTERNAL_OuterDomElement);
+                    return OpenSilver.Interop.ExecuteJavaScriptDouble($"{sDomElement}.scrollWidth - {sDomElement}.clientWidth");
+                }
+
+                return 0.0;
+            }
+            private set { SetValue(ScrollableWidthProperty, value); }
         }
 
         /// <summary>
         /// Identifies the <see cref="ViewportHeight"/> dependency property.
         /// </summary>
-        /// <returns>The identifier for the <see cref="ViewportHeight"/> dependency property.</returns>
-        public static readonly DependencyProperty ViewportHeightProperty = DependencyProperty.Register("ViewportHeight", typeof(double), typeof(ScrollViewer), null);
+        public static readonly DependencyProperty ViewportHeightProperty =
+            DependencyProperty.Register(
+                nameof(ViewportHeight),
+                typeof(double),
+                typeof(ScrollViewer),
+                new PropertyMetadata(0.0));
 
         /// <summary>
         /// Gets a value that contains the vertical size of the viewable content.
         /// </summary>
-        /// <returns>The vertical size of the viewable content. This property has no default value.</returns>
+        /// <returns>
+        /// The vertical size of the viewable content. This property has no default value.
+        /// </returns>
         public double ViewportHeight
         {
-            get { return (double)this.GetValue(ViewportHeightProperty); }
-            private set { this.SetValue(ViewportHeightProperty, value); }
+            get
+            {
+                if (CustomLayout || IsUnderCustomLayout)
+                {
+                    return (double)GetValue(ViewportHeightProperty);
+                }
+
+                if (INTERNAL_VisualTreeManager.IsElementInVisualTree(this) && INTERNAL_OuterDomElement != null)
+                {
+                    string sDomElement = CSHTML5.INTERNAL_InteropImplementation.GetVariableStringForJS(INTERNAL_OuterDomElement);
+                    return OpenSilver.Interop.ExecuteJavaScriptDouble($"{sDomElement}.clientHeight");
+                }
+
+                return 0.0;
+            }
+            private set { SetValue(ViewportHeightProperty, value); }
         }
 
         /// <summary>
         /// Identifies the <see cref="ViewportWidth"/> dependency property.
         /// </summary>
-        /// <returns>The identifier for the <see cref="ViewportWidth"/> dependency property.</returns>
-        public static readonly DependencyProperty ViewportWidthProperty = DependencyProperty.Register("ViewportWidth", typeof(double), typeof(ScrollViewer), null);
+        public static readonly DependencyProperty ViewportWidthProperty =
+            DependencyProperty.Register(
+                nameof(ViewportWidth),
+                typeof(double),
+                typeof(ScrollViewer),
+                new PropertyMetadata(0.0));
 
         /// <summary>
         /// Gets a value that contains the horizontal size of the viewable content.
@@ -671,8 +774,22 @@ namespace Windows.UI.Xaml.Controls
         /// <returns>The horizontal size of the viewable content. The default value is 0.0.</returns>
         public double ViewportWidth
         {
-            get { return (double)this.GetValue(ViewportWidthProperty); }
-            private set { this.SetValue(ViewportWidthProperty, value); }
+            get
+            {
+                if (CustomLayout || IsUnderCustomLayout)
+                {
+                    return (double)GetValue(ViewportWidthProperty);
+                }
+
+                if (INTERNAL_VisualTreeManager.IsElementInVisualTree(this) && INTERNAL_OuterDomElement != null)
+                {
+                    string sDomElement = CSHTML5.INTERNAL_InteropImplementation.GetVariableStringForJS(INTERNAL_OuterDomElement);
+                    return OpenSilver.Interop.ExecuteJavaScriptDouble($"{sDomElement}.clientWidth");
+                }
+
+                return 0.0;
+            }
+            private set { SetValue(ViewportWidthProperty, value); }
         }
 
         /// <summary>
@@ -710,33 +827,73 @@ namespace Windows.UI.Xaml.Controls
         /// <summary>
         /// Identifier for the <see cref="ExtentHeight"/> dependency property.
         /// </summary>
-        /// <returns>The identifier for the <see cref="ExtentHeight"/> dependency property.</returns>
-        public static readonly DependencyProperty ExtentHeightProperty = DependencyProperty.Register("ExtentHeight", typeof(double), typeof(ScrollViewer), null);
+        public static readonly DependencyProperty ExtentHeightProperty =
+            DependencyProperty.Register(
+                nameof(ExtentHeight),
+                typeof(double),
+                typeof(ScrollViewer),
+                new PropertyMetadata(0.0));
 
         /// <summary>
         /// Gets the vertical size of all the content for display in the <see cref="ScrollViewer"/>.
         /// </summary>
-        /// <returns>The vertical size of all the content for display in the <see cref="ScrollViewer"/>.</returns>
+        /// <returns>
+        /// The vertical size of all the content for display in the <see cref="ScrollViewer"/>.
+        /// </returns>
         public double ExtentHeight
         {
-            get { return (double)this.GetValue(ExtentHeightProperty); }
-            private set { this.SetValue(ExtentHeightProperty, value); }
+            get
+            {
+                if (CustomLayout || IsUnderCustomLayout)
+                {
+                    return (double)GetValue(ExtentHeightProperty);
+                }
+
+                if (INTERNAL_VisualTreeManager.IsElementInVisualTree(this) && INTERNAL_OuterDomElement != null)
+                {
+                    string sDomElement = CSHTML5.INTERNAL_InteropImplementation.GetVariableStringForJS(INTERNAL_OuterDomElement);
+                    return OpenSilver.Interop.ExecuteJavaScriptDouble($"{sDomElement}.scrollHeight");
+                }
+
+                return 0.0;
+            }
+            private set { SetValue(ExtentHeightProperty, value); }
         }
 
         /// <summary>
         /// Identifier for the <see cref="ExtentWidth"/> dependency property.
         /// </summary>
-        /// <returns>The identifier for the <see cref="ExtentWidth"/> dependency property.</returns>
-        public static readonly DependencyProperty ExtentWidthProperty = DependencyProperty.Register("ExtentWidth", typeof(double), typeof(ScrollViewer), null);
+        public static readonly DependencyProperty ExtentWidthProperty =
+            DependencyProperty.Register(
+                nameof(ExtentWidth),
+                typeof(double),
+                typeof(ScrollViewer),
+                new PropertyMetadata(0.0));
 
         /// <summary>
         /// Gets the horizontal size of all the content for display in the <see cref="ScrollViewer"/>.
         /// </summary>
-        /// <returns>The horizontal size of all the content for display in the <see cref="ScrollViewer"/>.</returns>
+        /// <returns>
+        /// The horizontal size of all the content for display in the <see cref="ScrollViewer"/>.
+        /// </returns>
         public double ExtentWidth
         {
-            get { return (double)this.GetValue(ExtentWidthProperty); }
-            private set { this.SetValue(ExtentWidthProperty, value); }
+            get
+            {
+                if (CustomLayout || IsUnderCustomLayout)
+                {
+                    return (double)GetValue(ExtentWidthProperty);
+                }
+
+                if (INTERNAL_VisualTreeManager.IsElementInVisualTree(this) && INTERNAL_OuterDomElement != null)
+                {
+                    string sDomElement = CSHTML5.INTERNAL_InteropImplementation.GetVariableStringForJS(INTERNAL_OuterDomElement);
+                    return OpenSilver.Interop.ExecuteJavaScriptDouble($"{sDomElement}.scrollWidth");
+                }
+
+                return 0.0;
+            }
+            private set { SetValue(ExtentWidthProperty, value); }
         }
 
         /// <summary>
@@ -877,6 +1034,64 @@ namespace Windows.UI.Xaml.Controls
                 }
 
                 e.Handled = true;
+            }
+        }
+
+        private bool TemplatedParentHandlesScrolling => TemplatedParent is Control c && c.HandlesScrolling;
+
+        /// <summary>
+        /// Responds to the KeyDown event. 
+        /// </summary> 
+        /// <param name="e">Provides data for KeyEventArgs.</param>
+        protected override void OnKeyDown(KeyEventArgs e)
+        {
+            base.OnKeyDown(e);
+
+            if (ScrollInfo != null && !e.Handled && !TemplatedParentHandlesScrolling)
+            {
+                // Parent is not going to handle scrolling; do so here 
+                bool control = ModifierKeys.Control == (Keyboard.Modifiers & ModifierKeys.Control);
+                bool handled = true;
+
+                switch (e.Key)
+                {
+                    case Key.Up:
+                        ScrollInfo.LineUp();
+                        break;
+                    case Key.Down:
+                        ScrollInfo.LineDown();
+                        break;
+                    case Key.Left:
+                        ScrollInfo.LineLeft();
+                        break;
+                    case Key.Right:
+                        ScrollInfo.LineRight();
+                        break;
+                    case Key.PageUp:
+                        ScrollInfo.PageUp();
+                        break;
+                    case Key.PageDown:
+                        ScrollInfo.PageDown();
+                        break;
+                    case Key.Home:
+                        if (!control)
+                            SetScrollOffset(Orientation.Horizontal, double.MinValue);
+                        else
+                            SetScrollOffset(Orientation.Vertical, double.MinValue);
+                        break;
+                    case Key.End:
+                        if (!control)
+                            SetScrollOffset(Orientation.Horizontal, double.MaxValue);
+                        else
+                            SetScrollOffset(Orientation.Vertical, double.MaxValue);
+                        break;
+                    default:
+                        handled = false;
+                        break;
+                }
+
+                if (handled)
+                    e.Handled = true;
             }
         }
 

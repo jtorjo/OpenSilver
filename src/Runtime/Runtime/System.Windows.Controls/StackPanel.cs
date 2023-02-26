@@ -50,6 +50,10 @@ namespace Windows.UI.Xaml.Controls
     /// </example>
     public partial class StackPanel : Panel
     {
+        internal sealed override Orientation LogicalOrientation => Orientation;
+
+        internal sealed override bool HasLogicalOrientation => true;
+
         /// <summary>
         /// Gets or sets the dimension by which child elements are stacked.
         /// </summary>
@@ -88,7 +92,7 @@ namespace Windows.UI.Xaml.Controls
                     innerDivStyle.height = string.Empty;
                     if (!stackPanel.CustomLayout)
                     {
-                        stackPanel.SetDisplayOnChildWrappers("block");
+                        stackPanel.UpdateChildWrappers(true);
                     }
                     break;
 
@@ -97,7 +101,7 @@ namespace Windows.UI.Xaml.Controls
                     innerDivStyle.height = "100%";
                     if (!stackPanel.CustomLayout)
                     {
-                        stackPanel.SetDisplayOnChildWrappers("flex");
+                        stackPanel.UpdateChildWrappers(false);
                     }
                     break;
             }
@@ -145,26 +149,46 @@ namespace Windows.UI.Xaml.Controls
             }
 
             var div = INTERNAL_HtmlDomManager.CreateDomElementAndAppendIt("div", parentRef, this, index);
-            INTERNAL_HtmlDomManager.GetDomElementStyleForModification(div).display = Orientation switch
+            var style = INTERNAL_HtmlDomManager.GetDomElementStyleForModification(div);
+            switch (Orientation)
             {
-                Orientation.Vertical => "block",
-                Orientation.Horizontal => "flex",
-                _ => throw new InvalidOperationException(),
-            };
+                case Orientation.Vertical:
+                    style.display = "block";
+                    break;
+
+                case Orientation.Horizontal:
+                    style.display = "flex";
+                    style.flex = "0 0 auto";
+                    break;
+
+                default:
+                    throw new InvalidOperationException();
+            }
 
             domElementWhereToPlaceChild = div;
             return div;
         }
 
-        private void SetDisplayOnChildWrappers(string display)
+        private void UpdateChildWrappers(bool isVertical)
         {
+            if (!HasChildren) return;
             foreach (UIElement child in Children)
             {
                 if (child.INTERNAL_InnerDivOfTheChildWrapperOfTheParentIfAny is not null)
                 {
                     var wrapperDivStyle = INTERNAL_HtmlDomManager.GetDomElementStyleForModification(
                         child.INTERNAL_InnerDivOfTheChildWrapperOfTheParentIfAny);
-                    wrapperDivStyle.display = display;
+
+                    if (isVertical)
+                    {
+                        wrapperDivStyle.display = "block";
+                        wrapperDivStyle.flex = string.Empty;
+                    }
+                    else
+                    {
+                        wrapperDivStyle.display = "flex";
+                        wrapperDivStyle.flex = "0 0 auto";
+                    }
                 }
             }
         }
