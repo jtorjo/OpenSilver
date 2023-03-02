@@ -159,6 +159,7 @@
 		<Compile Include="System.Windows.Automation\TransformPatternIdentifiers.cs" />
 		<Compile Include="System.Windows.Automation\DockPatternIdentifiers.cs" />
 		<Compile Include="System.Windows.Browser\EventSubscriber.cs" />
+		<Compile Include="System.Windows.Controls.Primitives\PopupService.cs" />
 		<Compile Include="System.Windows.Controls.Primitives\Selector.InternalSelectedItemsStorage.cs" />
 		<Compile Include="System.Windows.Controls.Primitives\Selector.Navigation.cs" />
 		<Compile Include="System.Windows.Controls.Primitives\Selector.SelectionChanger.cs" />
@@ -166,6 +167,7 @@
 		<Compile Include="System.Windows.Controls.Primitives\WORKINPROGRESS\LinearClipper.cs" />
 		<Compile Include="System.Windows.Controls\CalendarDayButton.cs" />
 		<Compile Include="System.Windows.Controls\CleanUpVirtualizedItemEventArgs.cs" />
+		<Compile Include="System.Windows.Controls\Control.VisualStates.cs" />
 		<Compile Include="System.Windows.Controls\DateTimeHelper.cs" />
 		<Compile Include="System.Windows.Controls\DragDecorator.cs" />
 		<Compile Include="System.Windows.Controls\GridSplitter\DragValidator.cs" />
@@ -192,6 +194,8 @@
 		<Compile Include="System.Windows.Controls\RichTextBox\RichTextFormatParser.cs" />
 		<Compile Include="System.Windows.Controls\RoutedPropertyChangingEventHandler.cs" />
 		<Compile Include="System.Windows.Controls\SelectedItemCollection.cs" />
+		<Compile Include="System.Windows.Controls\StackPanelHelper.cs" />
+		<Compile Include="System.Windows.Controls\TextBox.Navigation.cs" />
 		<Compile Include="System.Windows.Controls\TreeViewItemCheckBox.cs" />
 		<Compile Include="System.Windows.Controls\ListTimePickerPopupAutomationPeer.cs" />
 		<Compile Include="System.Windows.Automation.Peers\PickerAutomationPeer.cs" />
