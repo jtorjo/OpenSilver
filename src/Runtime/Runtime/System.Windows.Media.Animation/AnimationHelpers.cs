@@ -34,6 +34,13 @@ namespace System.Windows.Media.Animation
 namespace Windows.UI.Xaml.Media.Animation
 #endif
 {
+    internal class AnimationInfo
+    {
+        public JavascriptCallback Callback { get; set; }
+        public string Element { get; set; }
+        public string Key { get; set; }
+    }
+
     internal static class AnimationHelpers
     {
         internal static void CallVelocity(
@@ -70,9 +77,10 @@ queue:""{visualStateGroupName}""
 
             if (callbackForWhenfinished != null)
             {
-                var jsCallback = JavaScriptCallbackHelper.CreateSelfDisposedJavaScriptCallback(callbackForWhenfinished);                
-                sb.Append($"options.complete = {CSHTML5.INTERNAL_InteropImplementation.GetVariableStringForJS(jsCallback)};");
-                animation.RegisterCallback(jsCallback);
+                var jsCallback = JavaScriptCallbackHelper.CreateSelfDisposedJavaScriptCallback(callbackForWhenfinished);
+                string callback = $"document.getCallbackFunc({jsCallback.Id}, true, {(!OpenSilver.Interop.IsRunningInTheSimulator).ToString().ToLower()})";
+                sb.Append($"options.complete = {callback};");
+                animation.RegisterCallback(new AnimationInfo() { Callback = jsCallback, Element = sElement, Key = visualStateGroupName });
             }
 
             if (easingFunction != null)

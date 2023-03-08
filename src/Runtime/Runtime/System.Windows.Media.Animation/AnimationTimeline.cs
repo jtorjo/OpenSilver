@@ -29,7 +29,7 @@ namespace Windows.UI.Xaml.Media.Animation
 {
     public abstract partial class AnimationTimeline : Timeline
     {
-        private List<JavascriptCallback> _velocityCallbacks;
+        private List<AnimationInfo> _animationInfos;
         internal string _targetName;
         internal PropertyPath _targetProperty;
         internal DependencyObject _propertyContainer;
@@ -124,22 +124,26 @@ namespace Windows.UI.Xaml.Media.Animation
 
         internal virtual void StopAnimation() { }
 
-        internal void RegisterCallback(JavascriptCallback callback)
+        internal void RegisterCallback(AnimationInfo callback)
         {
-            _velocityCallbacks ??= new List<JavascriptCallback>();
-            _velocityCallbacks.Add(callback);
+            _animationInfos ??= new List<AnimationInfo>();
+            _animationInfos.Add(callback);
         }
 
         private void ReleaseCallbacks()
         {
-            if (_velocityCallbacks != null)
+            if (_animationInfos != null)
             {
-                foreach (JavascriptCallback callback in _velocityCallbacks)
+                foreach (AnimationInfo info in _animationInfos)
                 {
-                    callback.Dispose();
+                    OpenSilver.Interop.ExecuteJavaScriptAsync($@"
+Velocity.Utilities.removeData({info.Element}, ['{info.Key}' + 'queue']);
+Velocity.Utilities.removeData({info.Element}, ['velocity']);
+");
+                    info.Callback.Dispose();
                 }
 
-                _velocityCallbacks = null;
+                _animationInfos = null;
             }
         }
 
