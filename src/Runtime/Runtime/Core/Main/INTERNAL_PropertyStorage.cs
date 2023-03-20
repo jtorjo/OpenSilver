@@ -12,7 +12,7 @@ using Windows.UI.Xaml.Data;
 
 namespace CSHTML5.Internal
 {
-    internal sealed class INTERNAL_PropertyStorage
+    internal sealed class INTERNAL_DependencyProperty_PropertyStorage
     {
         #region Data
 
@@ -28,8 +28,10 @@ namespace CSHTML5.Internal
 
         #region Constructor
 
-        public INTERNAL_PropertyStorage(DependencyObject owner, DependencyProperty property, PropertyMetadata typeMetadata)
-        {
+        private PropertyMetadata _typeMetadata;
+
+        public INTERNAL_DependencyProperty_PropertyStorage(PropertyMetadata typeMetadata) {
+            _typeMetadata = typeMetadata;
             this._values = new object[5] 
             {
                 DependencyProperty.UnsetValue, //Local
@@ -40,8 +42,6 @@ namespace CSHTML5.Internal
             };
 
             this.Entry = new EffectiveValueEntry(typeMetadata.DefaultValue);
-            this.Owner = owner;
-            this.Property = property;
             this.TypeMetadata = typeMetadata;
         }
 
@@ -49,8 +49,6 @@ namespace CSHTML5.Internal
 
         #region Properties
 
-        public DependencyObject Owner { get; }
-        public DependencyProperty Property { get; }
         public PropertyMetadata TypeMetadata { get; }
 
         internal EffectiveValueEntry Entry { get; set; }
@@ -93,6 +91,68 @@ namespace CSHTML5.Internal
         {
             get { return this._values[0]; }
             set { this._values[0] = value; }
+        }
+
+        #endregion
+    }
+
+    internal struct INTERNAL_PropertyStorage {
+        private INTERNAL_DependencyProperty_PropertyStorage _impl;
+        private DependencyObject _owner;
+        private DependencyProperty _property;
+
+        public static INTERNAL_PropertyStorage Empty = Create(null, null, null);
+        public bool IsEmpty => Owner == null;
+
+        private INTERNAL_PropertyStorage(INTERNAL_DependencyProperty_PropertyStorage impl, DependencyObject owner, DependencyProperty property) {
+            _impl = impl;
+            _owner = owner;
+            _property = property;
+        }
+
+        public static INTERNAL_PropertyStorage Create(INTERNAL_DependencyProperty_PropertyStorage impl, DependencyObject owner, DependencyProperty property) {
+            return new INTERNAL_PropertyStorage(impl, owner, property);
+        }
+
+
+        internal bool INTERNAL_IsVisualValueDirty {
+            get => _impl.INTERNAL_IsVisualValueDirty;
+            set => _impl.INTERNAL_IsVisualValueDirty = value;
+        }
+
+        #region Properties
+
+        public DependencyObject Owner => _owner;
+        public DependencyProperty Property => _property;
+        public PropertyMetadata TypeMetadata => _impl.TypeMetadata;
+
+        internal EffectiveValueEntry Entry { get => _impl.Entry; set => _impl.Entry = value; }
+
+        internal bool IsAnimatedOverLocal { get => _impl.IsAnimatedOverLocal; set => _impl.IsAnimatedOverLocal = value; }
+
+        internal object LocalValue {
+            get => _impl.LocalValue;
+            set => _impl.LocalValue = value;
+        }
+
+        internal object AnimatedValue {
+            get => _impl.AnimatedValue;
+            set => _impl.AnimatedValue = value;
+        }
+
+        internal object LocalStyleValue {
+            get => _impl.LocalStyleValue;
+            set => _impl.LocalStyleValue = value;
+        }
+
+        internal object ThemeStyleValue {
+            get => _impl.ThemeStyleValue;
+            set => _impl.ThemeStyleValue = value;
+        }
+
+        internal object InheritedValue {
+            get => _impl.InheritedValue;
+            set => _impl.InheritedValue = value;
         }
 
         #endregion

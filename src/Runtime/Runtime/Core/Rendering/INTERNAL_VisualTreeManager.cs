@@ -139,8 +139,7 @@ namespace CSHTML5.Internal
                 if (IsElementInVisualTree(child))
                 {
                     // Verify that the child is really a child of the specified control:
-                    if (parent.INTERNAL_VisualChildrenInformation != null
-                        && parent.INTERNAL_VisualChildrenInformation.ContainsKey(child))
+                    if (parent.INTERNAL_VisualChildrenInformation != null && parent.INTERNAL_VisualChildrenInformation.ContainsKey(child))
                     {
                         // Remove the element from the DOM:
                         string stringForDebugging = !IsRunningInJavaScript() ? "Removing " + child.GetType().ToString() : null;
@@ -155,9 +154,7 @@ namespace CSHTML5.Internal
                         parent.INTERNAL_VisualChildrenInformation.Remove(child);
 
                         //Detach Element  
-                        DetachVisualChidren(child);
-
-                        INTERNAL_WorkaroundIE11IssuesWithScrollViewerInsideGrid.RefreshLayoutIfIE();
+                        DetachVisualChildren(child);
 
                         parent.InvalidateMeasure();
                         parent.InvalidateArrange();
@@ -185,13 +182,9 @@ namespace CSHTML5.Internal
 
                         //Detach Element
                         if (child.INTERNAL_VisualChildrenInformation == null)
-                        {
                             DetachElement(child);
-                        }
                         else
-                        {
-                            DetachVisualChidren(child);
-                        }
+                            DetachVisualChildren(child);
                     }
                     else
                     {
@@ -207,7 +200,7 @@ namespace CSHTML5.Internal
 #endif
         }
 
-        private static void DetachVisualChidren(UIElement element)
+        private static void DetachVisualChildren(UIElement element)
         {
             var queue = new Queue<UIElement>();
             queue.Enqueue(element);
@@ -399,8 +392,6 @@ if(nextSibling != undefined) {
                     // Nothing to do: the element is already attached to the specified parent.
                     return; //prevent from useless call to INTERNAL_WorkaroundIE11IssuesWithScrollViewerInsideGrid.RefreshLayoutIfIE().
                 }
-
-                INTERNAL_WorkaroundIE11IssuesWithScrollViewerInsideGrid.RefreshLayoutIfIE();
 
                 child.InvalidateMeasure();
                 child.InvalidateArrange();
@@ -840,10 +831,10 @@ if(nextSibling != undefined) {
             Performance.Counter("VisualTreeManager: Copy list of properties", t0);
 #endif
 
-            foreach (KeyValuePair<DependencyProperty, INTERNAL_PropertyStorage> propertiesAndTheirStorage in list)
+            foreach (var propertyAndStorage in list)
             {
                 // Read the value:
-                DependencyProperty property = propertiesAndTheirStorage.Key;
+                DependencyProperty property = propertyAndStorage.Key;
 
 #if PERFSTAT
                 var t1 = Performance.now();
@@ -853,7 +844,7 @@ if(nextSibling != undefined) {
 
                 if (propertyMetadata != null)
                 {
-                    INTERNAL_PropertyStorage storage = propertiesAndTheirStorage.Value;
+                    var storage = propertyAndStorage.Value;
                     object value = null;
                     bool valueWasRetrieved = false;
 
@@ -869,7 +860,7 @@ if(nextSibling != undefined) {
                             valueWasRetrieved = true;
                         }
 
-                        INTERNAL_PropertyStore.ApplyCssChanges(value, value, propertyMetadata, storage.Owner);
+                        INTERNAL_PropertyStore.ApplyCssChanges(value, value, propertyMetadata, dependencyObject);
                     }
 
                     //--------------------------------------------------
@@ -884,7 +875,7 @@ if(nextSibling != undefined) {
                         }
 
                         // Call the "Method to update DOM"
-                        propertyMetadata.MethodToUpdateDom(storage.Owner, value);
+                        propertyMetadata.MethodToUpdateDom(dependencyObject, value);
                     }
 
                     if (propertyMetadata.MethodToUpdateDom2 != null)
@@ -897,7 +888,7 @@ if(nextSibling != undefined) {
 
                         // DependencyProperty.UnsetValue for the old value signify that
                         // the old value should be ignored.
-                        propertyMetadata.MethodToUpdateDom2(storage.Owner, DependencyProperty.UnsetValue, value);
+                        propertyMetadata.MethodToUpdateDom2(dependencyObject, DependencyProperty.UnsetValue, value);
                     }
 
                     //--------------------------------------------------
@@ -914,7 +905,7 @@ if(nextSibling != undefined) {
                         }
 
                         // Raise the "PropertyChanged" event
-                        propertyMetadata.PropertyChangedCallback(storage.Owner, new DependencyPropertyChangedEventArgs(value, value, property));
+                        propertyMetadata.PropertyChangedCallback(dependencyObject, new DependencyPropertyChangedEventArgs(value, value, property));
                     }
                 }
 

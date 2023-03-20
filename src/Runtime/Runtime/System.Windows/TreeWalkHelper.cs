@@ -86,7 +86,7 @@ namespace Windows.UI.Xaml
                 }
                 else
                 {
-                    if (storage == null)
+                    if (storage.IsEmpty)
                     {
                         // get the storage if we didn't to it ealier.
                         INTERNAL_PropertyStore.TryGetInheritedPropertyStorage(d, dp, true, out storage);

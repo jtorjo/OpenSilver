@@ -56,7 +56,6 @@ namespace Windows.UI.Xaml
             {
                 FrameworkElement visualTree = Template.LoadContent(container);
                 container.TemplateChild = visualTree;
-                
                 return visualTree != null;
             }
             else

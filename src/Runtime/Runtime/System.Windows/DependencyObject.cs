@@ -17,6 +17,7 @@ using System.Linq;
 using CSHTML5.Internal;
 using OpenSilver.Internal.Data;
 using OpenSilver.Internal;
+using System.Windows.Controls;
 
 #if MIGRATION
 using System.Windows.Threading;
@@ -32,6 +33,21 @@ namespace System.Windows
 namespace Windows.UI.Xaml
 #endif
 {
+
+
+    public static class WeakRefernceExtensions {
+        public static T TryGetTarget<T>(this WeakReference<T> t) where T : class {
+            if (t.TryGetTarget(out var result))
+                return result;
+            return null;
+        }
+        public static T GetTarget<T>(this WeakReference<T> t) where T : class {
+            if (t.TryGetTarget(out var result))
+                return result;
+            throw new Exception($"weak reference not found anymore: {typeof(T)}");
+        }
+    }
+
     /// <summary>
     /// Represents an object that participates in the dependency property system. DependencyObject
     /// is the immediate base class of many important UI-related classes, such as
@@ -41,7 +57,7 @@ namespace Windows.UI.Xaml
     {
         #region Inheritance Context
 
-        private HashSet<DependencyObject> _contextListeners;
+        private List< WeakReference<DependencyObject> > _contextListeners;
 
         internal event EventHandler InheritedContextChanged;        
 
@@ -116,8 +132,8 @@ namespace Windows.UI.Xaml
                 && this.CanBeInheritanceContext
                 && !doValue.IsInheritanceContextSealed)
             {
-                DependencyObject oldInheritanceContext = doValue.InheritanceContext;
-                if (this == oldInheritanceContext)
+                var oldInheritanceContext = doValue.InheritanceContext;
+                if (ReferenceEquals(this, oldInheritanceContext))
                 {
                     doValue.RemoveInheritanceContext(this, dp);
 
@@ -218,7 +234,7 @@ namespace Windows.UI.Xaml
 
             if (this._contextListeners != null)
             {
-                foreach (DependencyObject listener in this._contextListeners)
+                foreach (DependencyObject listener in this._contextListeners.Select(wr => wr.TryGetTarget()).Where(wr => wr != null))
                 {
                     listener.OnInheritedContextChanged(args);
                 }
@@ -241,10 +257,12 @@ namespace Windows.UI.Xaml
         {
             if (this._contextListeners == null)
             {
-                this._contextListeners = new HashSet<DependencyObject>();
+                this._contextListeners = new List<WeakReference<DependencyObject>>();
             }
 
-            this._contextListeners.Add(listener);
+            var wr = _contextListeners.FirstOrDefault(l => ReferenceEquals(l.TryGetTarget(), listener));
+            if (wr == null)
+                this._contextListeners.Add(new WeakReference<DependencyObject>(listener));
         }
 
         private void StopListeningToInheritanceContextChanges(DependencyObject listener)
@@ -254,29 +272,146 @@ namespace Windows.UI.Xaml
                 return;
             }
 
-            bool isListening = this._contextListeners.Contains(listener);
-            if (isListening)
-            {
-                this._contextListeners.Remove(listener);
-            }
+            var wr = _contextListeners.FirstOrDefault(l => ReferenceEquals(l.TryGetTarget(), listener));
+            if (wr != null)
+                _contextListeners.Remove(wr);
         }
 
         #endregion
 
         private Dictionary<DependencyProperty, DependentList> _dependentListMap;
-        internal Dictionary<DependencyProperty, INTERNAL_PropertyStorage> INTERNAL_PropertyStorageDictionary { get; } // Contains all the properties that are either not in INTERNAL_AllInheritedProperties or in INTERNAL_UsefulInheritedProperties
-        internal Dictionary<DependencyProperty, INTERNAL_PropertyStorage> INTERNAL_AllInheritedProperties { get; } // Here so that when we attach a child, the child gets all the properties that are in there (this allows the inherited properties to go all the way down even for properties that are not contained in the children)
-        internal List<DependencyProperty> INTERNAL_PropertiesForWhichToCallPropertyChangedWhenLoadedIntoVisualTree; // When a UI element is added to the Visual Tree, we call "PropertyChanged" on all its set properties so that the control can refresh itself. However, when a property is not set, we don't call PropertyChanged. Unless the property is listed here.
+        // Contains all the properties that are either not in INTERNAL_AllInheritedProperties or in INTERNAL_UsefulInheritedProperties
+        internal Dictionary<DependencyProperty, INTERNAL_DependencyProperty_PropertyStorage> INTERNAL_PropertyStorageDictionary { get; } =
+            new Dictionary<DependencyProperty, INTERNAL_DependencyProperty_PropertyStorage>();
+
+        // Here so that when we attach a child, the child gets all the properties that are in there (this allows the inherited properties to go all the way down even for properties that are not contained in the children)
+        internal Dictionary<DependencyProperty, INTERNAL_DependencyProperty_PropertyStorage> INTERNAL_AllInheritedProperties { get; } =
+            new Dictionary<DependencyProperty, INTERNAL_DependencyProperty_PropertyStorage>();
 
 
         #region Constructor
         public DependencyObject()
         {
             CanBeInheritanceContext = true;
-            INTERNAL_PropertyStorageDictionary = new Dictionary<DependencyProperty, INTERNAL_PropertyStorage>();
-            INTERNAL_AllInheritedProperties = new Dictionary<DependencyProperty, INTERNAL_PropertyStorage>();
         }
         #endregion
+
+        internal INTERNAL_PropertyStorage TryGetStorage(DependencyProperty dependencyProperty, bool createIfNotFoud)
+        {
+            if (this.INTERNAL_PropertyStorageDictionary.TryGetValue(dependencyProperty, out var storage)) 
+                return INTERNAL_PropertyStorage.Create(storage, this, dependencyProperty);
+
+            if (createIfNotFoud)
+            {
+                // Get the type metadata
+                PropertyMetadata typeMetadata = dependencyProperty.GetTypeMetaData(this.GetType());
+
+                //----------------------
+                // CREATE A NEW STORAGE:
+                //----------------------
+
+                storage = new INTERNAL_DependencyProperty_PropertyStorage(typeMetadata);
+                this.INTERNAL_PropertyStorageDictionary.Add(dependencyProperty, storage);
+
+                //-----------------------
+                // CHECK IF THE PROPERTY IS INHERITABLE:
+                //-----------------------
+                if (typeMetadata.Inherits)
+                {
+                    //-----------------------
+                    // ADD THE STORAGE TO "INTERNAL_AllInheritedProperties" IF IT IS NOT ALREADY THERE:
+                    //-----------------------
+                    this.INTERNAL_AllInheritedProperties.Add(dependencyProperty, storage);
+                }
+
+                return INTERNAL_PropertyStorage.Create(storage, this, dependencyProperty);
+            }
+
+            return INTERNAL_PropertyStorage.Empty;
+        }
+
+        internal INTERNAL_PropertyStorage TryGetInheritedPropertyStorage(DependencyProperty dependencyProperty, bool createIfNotFoud)
+        {
+            // Create the Storage if it does not already exist
+            if (this.INTERNAL_AllInheritedProperties.TryGetValue(dependencyProperty, out var storage))
+                return INTERNAL_PropertyStorage.Create(storage, this, dependencyProperty);
+
+            if (createIfNotFoud)
+            {
+                // Get the type metadata (if any):
+                PropertyMetadata typeMetadata = dependencyProperty.GetTypeMetaData(this.GetType());
+
+                global::System.Diagnostics.Debug.Assert(typeMetadata != null && typeMetadata.Inherits,
+                                                        $"{dependencyProperty.Name} is not an inherited property.");
+
+                // Create the storage:
+                storage = new INTERNAL_DependencyProperty_PropertyStorage(typeMetadata);
+
+                //-----------------------
+                // CHECK IF THE PROPERTY BELONGS TO THE OBJECT (OR TO ONE OF ITS ANCESTORS):
+                //-----------------------
+                //below: we check if the property is useful to the current this, in which case we set it as its inheritedValue in "PropertyStorageDictionary"
+                if (dependencyProperty.OwnerType.IsAssignableFrom(this.GetType()))
+                {
+                    //-----------------------
+                    // ADD THE STORAGE TO "INTERNAL_PropertyStorageDictionary"
+                    //-----------------------
+                    this.INTERNAL_PropertyStorageDictionary.Add(dependencyProperty, storage);
+                }
+                this.INTERNAL_AllInheritedProperties.Add(dependencyProperty, storage);
+                return INTERNAL_PropertyStorage.Create(storage, this, dependencyProperty);
+
+            }
+
+            return INTERNAL_PropertyStorage.Empty;
+        }
+
+        internal void InvalidateInheritedProperties(UIElement uie)
+        {
+            foreach (var storage in INTERNAL_AllInheritedProperties.ToList())
+            {
+                uie.SetInheritedValue(storage.Key,
+                    INTERNAL_PropertyStore.GetEffectiveValue(storage.Value.Entry),
+                    true);
+            }
+        }
+
+
+
+        public void TemplateChildRemovedFromUITree() {
+            INTERNAL_PropertyStorageDictionary.Clear();
+            INTERNAL_AllInheritedProperties.Clear();
+            if (_dependentListMap != null)
+                foreach (var dep in _dependentListMap.Values.ToList())
+                    dep.Clear();
+            _dependentListMap?.Clear();
+            _contextListeners?.Clear();
+            _contextStorage?.SetContext(null);
+        }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
         /// <summary>
@@ -519,17 +654,16 @@ namespace Windows.UI.Xaml
         internal void ResetInheritedProperties()
         {
             // Copy of the keys to allow removing items from the Dictionary furing the foreach.
-            INTERNAL_PropertyStorage[] storages = INTERNAL_AllInheritedProperties.Values.ToArray();
-            foreach (INTERNAL_PropertyStorage storage in storages)
-            {
+            foreach (var key in INTERNAL_AllInheritedProperties.Keys.ToList()) {
+                var storage  = INTERNAL_PropertyStorage.Create(INTERNAL_AllInheritedProperties[key], this, key);
                 INTERNAL_PropertyStore.SetInheritedValue(storage, 
                                                          DependencyProperty.UnsetValue,
                                                          false); // recursively
                 if (storage.Entry.BaseValueSourceInternal == BaseValueSourceInternal.Default)
                 {
                     // Remove storage if the effective value is the default value.
-                    INTERNAL_AllInheritedProperties.Remove(storage.Property);
-                    INTERNAL_PropertyStorageDictionary.Remove(storage.Property);
+                    INTERNAL_AllInheritedProperties.Remove(key);
+                    INTERNAL_PropertyStorageDictionary.Remove(key);
                 }
             }
         }

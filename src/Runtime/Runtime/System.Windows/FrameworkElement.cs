@@ -278,15 +278,8 @@ namespace Windows.UI.Xaml
             {
                 uie.ResetInheritedProperties();
             }
-            else
-            {
-                INTERNAL_PropertyStorage[] storages = newParent.INTERNAL_AllInheritedProperties.Values.ToArray();
-                foreach (var storage in storages)
-                {
-                    uie.SetInheritedValue(storage.Property,
-                                          INTERNAL_PropertyStore.GetEffectiveValue(storage.Entry),
-                                          true);
-                }
+            else {
+                newParent.InvalidateInheritedProperties(uie);
             }
         }
 
@@ -340,13 +333,16 @@ namespace Windows.UI.Xaml
             get => _templateChild;
             set
             {
-                if (_templateChild != value)
-                {
+                if (_templateChild != value) {
+                    var oldValue = _templateChild;
                     INTERNAL_VisualTreeManager.DetachVisualChildIfNotNull(_templateChild, this);
                     RemoveVisualChild(_templateChild);
                     _templateChild = value;
                     AddVisualChild(_templateChild);
                     INTERNAL_VisualTreeManager.AttachVisualChildIfNotAlreadyAttached(_templateChild, this, 0);
+
+                    // memory optimization - get rid of lots of stored properties inside DependencyObject
+                    oldValue?.TemplateChildRemovedFromUITree();
                 }
             }
         }

@@ -31,44 +31,15 @@ namespace CSHTML5.Internal
         /// </summary>
         /// <param name="dependencyObject"></param>
         /// <param name="dependencyProperty"></param>
-        /// <param name="createIfNotFoud">when set to true, it forces the creation of the storage if it does not exists yet.</param>
+        /// <param name="createIfNotFound">when set to true, it forces the creation of the storage if it does not exists yet.</param>
         /// <param name="storage"></param>
         /// <returns></returns>
         public static bool TryGetStorage(DependencyObject dependencyObject,
                                          DependencyProperty dependencyProperty,
-                                         bool createIfNotFoud,
-                                         out INTERNAL_PropertyStorage storage)
-        {
-            if (dependencyObject.INTERNAL_PropertyStorageDictionary.TryGetValue(dependencyProperty, out storage))
-            {
-                return true;
-            }
-
-            if (createIfNotFoud)
-            {
-                // Get the type metadata
-                PropertyMetadata typeMetadata = dependencyProperty.GetTypeMetaData(dependencyObject.GetType());
-
-                //----------------------
-                // CREATE A NEW STORAGE:
-                //----------------------
-
-                storage = new INTERNAL_PropertyStorage(dependencyObject, dependencyProperty, typeMetadata);
-                dependencyObject.INTERNAL_PropertyStorageDictionary.Add(dependencyProperty, storage);
-
-                //-----------------------
-                // CHECK IF THE PROPERTY IS INHERITABLE:
-                //-----------------------
-                if (typeMetadata.Inherits)
-                {
-                    //-----------------------
-                    // ADD THE STORAGE TO "INTERNAL_AllInheritedProperties" IF IT IS NOT ALREADY THERE:
-                    //-----------------------
-                    dependencyObject.INTERNAL_AllInheritedProperties.Add(dependencyProperty, storage);
-                }
-            }
-
-            return createIfNotFoud;
+                                         bool createIfNotFound,
+                                         out INTERNAL_PropertyStorage storage) {
+            storage = dependencyObject.TryGetStorage(dependencyProperty, createIfNotFound);
+            return !storage.IsEmpty;
         }
 
         /// <summary>
@@ -85,38 +56,8 @@ namespace CSHTML5.Internal
                                                             bool createIfNotFoud,
                                                             out INTERNAL_PropertyStorage storage)
         {
-            // Create the Storage if it does not already exist
-            if (dependencyObject.INTERNAL_AllInheritedProperties.TryGetValue(dependencyProperty, out storage))
-            {
-                return true;
-            }
-
-            if (createIfNotFoud)
-            {
-                // Get the type metadata (if any):
-                PropertyMetadata typeMetadata = dependencyProperty.GetTypeMetaData(dependencyObject.GetType());
-
-                global::System.Diagnostics.Debug.Assert(typeMetadata != null && typeMetadata.Inherits,
-                                                        $"{dependencyProperty.Name} is not an inherited property.");
-
-                // Create the storage:
-                storage = new INTERNAL_PropertyStorage(dependencyObject, dependencyProperty, typeMetadata);
-
-                //-----------------------
-                // CHECK IF THE PROPERTY BELONGS TO THE OBJECT (OR TO ONE OF ITS ANCESTORS):
-                //-----------------------
-                //below: we check if the property is useful to the current DependencyObject, in which case we set it as its inheritedValue in "PropertyStorageDictionary"
-                if (dependencyProperty.OwnerType.IsAssignableFrom(dependencyObject.GetType()))
-                {
-                    //-----------------------
-                    // ADD THE STORAGE TO "INTERNAL_PropertyStorageDictionary"
-                    //-----------------------
-                    dependencyObject.INTERNAL_PropertyStorageDictionary.Add(dependencyProperty, storage);
-                }
-                dependencyObject.INTERNAL_AllInheritedProperties.Add(dependencyProperty, storage);
-            }
-
-            return createIfNotFoud;
+            storage = dependencyObject.TryGetInheritedPropertyStorage(dependencyProperty, createIfNotFoud);
+            return !storage.IsEmpty;
         }
 
         internal static void SetValueCommon(INTERNAL_PropertyStorage storage,
