@@ -303,40 +303,20 @@ namespace Windows.UI.Xaml
         }
 
         internal bool IsCustomLayoutRoot
-        {
-            get
-            {
-                FrameworkElement parent = this as FrameworkElement;
-
-                if (parent.CustomLayout == false)
-                    return false;
-
-                FrameworkElement layoutRoot = null;
-                while (parent != null)
-                {
-                    if (parent.CustomLayout)
-                        layoutRoot = parent;
-                    parent = VisualTreeHelper.GetParent(parent) as FrameworkElement;
-                }
-
-                if (layoutRoot == null)
-                    return false;
-
-                return layoutRoot == this;
-            }
-        }
+            => this is FrameworkElement fe && fe.CustomLayout && !IsUnderCustomLayout;
 
         internal bool IsUnderCustomLayout
         {
             get
             {
-                FrameworkElement parent = VisualTreeHelper.GetParent(this) as FrameworkElement;
-                
-                while (parent != null)
+                UIElement element = this;
+
+                while (GetLayoutParent(element) is FrameworkElement parent)
                 {
                     if (parent.CustomLayout)
                         return true;
-                    parent = VisualTreeHelper.GetParent(parent) as FrameworkElement;
+
+                    element = parent;
                 }
 
                 return false;
@@ -349,6 +329,7 @@ namespace Windows.UI.Xaml
         {
             DesiredSize = new Size();
             PreviousFinalRect = Rect.Empty;
+            RenderedVisualBounds = Rect.Empty;
             PreviousAvailableSize = new Size(double.PositiveInfinity, double.PositiveInfinity);
             previousDesiredSize = Size.Empty;
             layoutMeasuredSize = Size.Empty;
@@ -1204,7 +1185,7 @@ namespace Windows.UI.Xaml
                 {
                     string uid = ((INTERNAL_HtmlDomElementReference)element).UniqueIdentifier;
                     string javaScriptCodeToExecute = $@"document.rerouteMouseEvents(""{uid}"")";
-                    INTERNAL_HtmlDomManager.ExecuteJavaScriptWithResult(javaScriptCodeToExecute);
+                    INTERNAL_ExecuteJavaScript.ExecuteJavaScriptWithResult(javaScriptCodeToExecute);
                 }
                 return true;
             }
@@ -1299,7 +1280,7 @@ document.onclick = null;
 document.oncontextmenu = null;
 document.ondblclick = null;
 ";
-                    INTERNAL_HtmlDomManager.ExecuteJavaScript(javaScriptCodeToExecute);
+                    INTERNAL_ExecuteJavaScript.QueueExecuteJavaScript(javaScriptCodeToExecute);
                     Pointer.INTERNAL_captured = null;
 #if MIGRATION
                     OnLostMouseCapture(new MouseEventArgs());
@@ -1594,18 +1575,20 @@ document.ondblclick = null;
                 bool previousArrangeValid = IsArrangeValid;
                 Rect savedPreviousFinalRect = PreviousFinalRect;
                 PreviousFinalRect = finalRect;
-                IsArrangeValid = true;
-
                 LayoutManager.Current.RemoveArrange(this);
 
                 if (this.IsVisible == false)
                 {
                     IsRendered = false;
+                    IsArrangeValid = true;
                     return;
                 }
 
                 if (IsRendered && previousArrangeValid && finalRect.Location.IsClose(savedPreviousFinalRect.Location) && finalRect.Size.IsClose(savedPreviousFinalRect.Size))
+                {
+                    IsArrangeValid = true;
                     return;
+                }
 
                 if (!IsMeasureValid)
                 {
@@ -1619,7 +1602,7 @@ document.ondblclick = null;
                 }
 
                 ArrangeCore(finalRect);
-
+                IsArrangeValid = true;
                 PreviousFinalRect = finalRect;
 
                 // Render with new size & location
@@ -1698,7 +1681,6 @@ document.ondblclick = null;
                 bool previousMeasureValid = IsMeasureValid;
                 Size savedPreviousAvailableSize = PreviousAvailableSize;
                 PreviousAvailableSize = availableSize;
-                IsMeasureValid = true;
 
                 LayoutManager.Current.RemoveMeasure(this);
 
@@ -1706,10 +1688,12 @@ document.ondblclick = null;
                 {
                     DesiredSize = new Size();
                     previousDesiredSize = Size.Empty;
+                    IsMeasureValid = true;
                     return;
                 }
                 else if (previousMeasureValid && savedPreviousAvailableSize.IsClose(availableSize) && previousDesiredSize != Size.Empty)
                 {
+                    IsMeasureValid = true;
                     return;
                 }
 
@@ -1723,7 +1707,7 @@ document.ondblclick = null;
                 {
                     measureInProgress = false;
                 }
-
+                IsMeasureValid = true;
                 if (previousDesiredSizeInMeasure != DesiredSize)
                 {
                     this.InvalidateArrange();
@@ -1751,28 +1735,19 @@ document.ondblclick = null;
             LayoutManager.Current.AddArrange(this);
         }
 
-        internal void InvalidateParentMeasure()
-        {
-            UIElement parent = VisualTreeHelper.GetParent(this) as UIElement;
-            if (parent is GridNotLogical)
-            {
-                parent.InvalidateParentMeasure();
-                return;
-            }
-            parent?.InvalidateMeasure();
-        }
+        internal void InvalidateParentMeasure() => GetLayoutParent(this)?.InvalidateMeasure();
 
-        internal void InvalidateParentArrange()
-        {
-            UIElement parent = VisualTreeHelper.GetParent(this) as UIElement;
-            if (parent is GridNotLogical)
+        internal void InvalidateParentArrange() => GetLayoutParent(this)?.InvalidateArrange();
+
+        private static UIElement GetLayoutParent(UIElement element)
+            => VisualTreeHelper.GetParent(element) switch
             {
-                parent.InvalidateParentArrange();
-                return;
-            }
-            parent?.InvalidateArrange();
-        }
-        
+                GridNotLogical gnl => GetLayoutParent(gnl),
+                UIElement uie => uie,
+                null when element is FrameworkElement fe && fe.Parent is Popup popup => popup.PopupRoot?.Content,
+                _ => null,
+            };
+
         public void InvalidateMeasure()
         {
             if (!IsMeasureValid)

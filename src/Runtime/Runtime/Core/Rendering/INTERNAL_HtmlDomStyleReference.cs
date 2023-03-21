@@ -94,19 +94,19 @@ namespace CSHTML5.Internal
         void SetStylePropertyValue(string propertyName, string propertyValue)
         {
             string javaScriptCodeToExecute = $@"document.setDomStyle(""{Uid}"", ""{propertyName}"", ""{propertyValue}"")";
-            INTERNAL_SimulatorExecuteJavaScript.ExecuteJavaScriptAsync(javaScriptCodeToExecute);
+            INTERNAL_ExecuteJavaScript.QueueExecuteJavaScript(javaScriptCodeToExecute);
         }
 
         void SetTransformPropertyValue(string propertyValue)
         {
             string javaScriptCodeToExecute = $@"document.setDomTransform(""{Uid}"", ""{propertyValue}"")";
-            INTERNAL_SimulatorExecuteJavaScript.ExecuteJavaScriptAsync(javaScriptCodeToExecute);
+            INTERNAL_ExecuteJavaScript.QueueExecuteJavaScript(javaScriptCodeToExecute);
         }
 
         void SetTransformOriginPropertyValue(string propertyValue)
         {
             string javaScriptCodeToExecute = $@"document.setDomTransformOrigin(""{Uid}"", ""{propertyValue}"")";
-            INTERNAL_SimulatorExecuteJavaScript.ExecuteJavaScriptAsync(javaScriptCodeToExecute);
+            INTERNAL_ExecuteJavaScript.QueueExecuteJavaScript(javaScriptCodeToExecute);
         }
 
         //        string GetStylePropertyValue(string propertyName)
@@ -181,6 +181,7 @@ namespace CSHTML5.Internal
         public string msTransform { set { transform = value; } }
         public string msTransformOrigin { set { transformOrigin = value; } }
         public string objectPosition { set { SetStylePropertyValue("objectPosition", value); } }
+        public string objectFit { set { SetStylePropertyValue("objectFit", value); } }
         public string opacity { set { SetStylePropertyValue("opacity", value); } }
         public string outline { set { SetStylePropertyValue("outline", value); } }
         public string overflow { set { SetStylePropertyValue("overflow", value); } }

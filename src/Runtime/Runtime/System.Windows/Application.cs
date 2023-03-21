@@ -111,7 +111,7 @@ namespace Windows.UI.Xaml
             // Initialize the window:
             if (_mainWindow == null) // Note: it could be != null if the user clicks "Restart" from the Simulator advanced options.
             {
-                _mainWindow = new Window(true);
+                _mainWindow = new Window(true, true);
                 Window.Current = _mainWindow;
                 object applicationRootDomElement = INTERNAL_HtmlDomManager.GetApplicationRootDomElement();
                 _mainWindow.AttachToDomElement(applicationRootDomElement);
@@ -717,11 +717,8 @@ namespace Windows.UI.Xaml
         /// <param name="entryPoint"></param>
         public static void RunApplication(Action entryPoint)
         {
-            // (See the comments in the definition of the following method for more information on the purpose)
-            INTERNAL_SimulatorExecuteJavaScript.RunActionThenExecutePendingAsyncJSCodeExecutedDuringThatAction
-                (
-                entryPoint
-                );
+            entryPoint();
+            INTERNAL_ExecuteJavaScript.ExecutePendingJavaScriptCode();
         }
 #endif
     }

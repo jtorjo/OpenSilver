@@ -12,8 +12,9 @@
 *  
 \*====================================================================================*/
 
-using CSHTML5;
 using System;
+using CSHTML5;
+using CSHTML5.Internal;
 
 #if !MIGRATION
 using Windows.UI.Xaml.Interop;
@@ -27,6 +28,9 @@ namespace Windows.UI.Xaml // Note: we didn't use the "Interop" namespace to avoi
 {
     public partial class Content
     {
+        private readonly JavaScriptCallback _fullscreenchangeCallback;
+        private readonly JavaScriptCallback _windowresizeCallback;
+
         public Content() : this(false)
         {
         }
@@ -35,11 +39,16 @@ namespace Windows.UI.Xaml // Note: we didn't use the "Interop" namespace to avoi
         {
             if (hookupEvents)
             {
+                _fullscreenchangeCallback = JavaScriptCallback.Create(FullScreenChangedCallback, true);
+                _windowresizeCallback = JavaScriptCallback.Create(WindowResizeCallback, true);
+
                 // Hooks the FullScreenChanged event
-                OpenSilver.Interop.ExecuteJavaScriptVoid($"document.addEventListener('fullscreenchange', {INTERNAL_InteropImplementation.GetVariableStringForJS(new Action(FullScreenChangedCallback))})");
+                OpenSilver.Interop.ExecuteJavaScriptVoid(
+                    $"document.addEventListener('fullscreenchange', {INTERNAL_InteropImplementation.GetVariableStringForJS(_fullscreenchangeCallback)})");
 
                 // Hooks the Resized event
-                OpenSilver.Interop.ExecuteJavaScriptVoid($"new ResizeSensor(document.getXamlRoot(), {INTERNAL_InteropImplementation.GetVariableStringForJS(new Action(WindowResizeCallback))})");
+                OpenSilver.Interop.ExecuteJavaScriptVoid(
+                    $"new ResizeSensor(document.getXamlRoot(), {INTERNAL_InteropImplementation.GetVariableStringForJS(_windowresizeCallback)})");
 
                 // WORKINPROGRESS
                 // Add Zoomed event
@@ -135,7 +144,7 @@ if (requestMethod) {
         /// </summary>
         private void FullScreenChangedCallback()
         {
-            FullScreenChanged?.Invoke(this, EventArgs.Empty);
+            FullScreenChanged?.Invoke(Application.Current?.RootVisual, EventArgs.Empty);
         }
 
         /// <summary>
@@ -144,7 +153,7 @@ if (requestMethod) {
         /// </summary>
         private void WindowResizeCallback()
         {
-            Resized?.Invoke(this, EventArgs.Empty);
+            Resized?.Invoke(Application.Current?.RootVisual, EventArgs.Empty);
         }
 
         /// <summary>
