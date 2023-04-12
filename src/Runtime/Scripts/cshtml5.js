@@ -425,7 +425,21 @@ document.addEventListenerSafe = function (element, method, func) {
             element.addEventListener(method, func);
         }
     }
-}
+};
+
+document.setFocus = function (element) {
+    if (!element) return;
+
+    // HTML elements will not receive focus when their tabindex is null
+    // Temporarily set the tabindex to allow it to get focused
+    if (element.getAttribute('tabindex') === null) {
+        element.setAttribute('tabindex', -1);
+        element.focus({ preventScroll: true });
+        element.removeAttribute('tabindex');
+    } else {
+        element.focus({ preventScroll: true });
+    }
+};
 
 document.createInputManager = function (callback) {
     if (document.inputManager) return;
@@ -433,13 +447,13 @@ document.createInputManager = function (callback) {
     // This must remain synchronyzed with the EVENTS enum defined in InputManager.cs.
     // Make sure to change both files if you update this !
     const EVENTS = {
-        POINTER_MOVE: 0,
-        POINTER_LEFT_DOWN: 1,
-        POINTER_LEFT_UP: 2,
-        POINTER_RIGHT_DOWN: 3,
-        POINTER_RIGHT_UP: 4,
-        POINTER_ENTER: 5,
-        POINTER_LEAVE: 6,
+        MOUSE_MOVE: 0,
+        MOUSE_LEFT_DOWN: 1,
+        MOUSE_LEFT_UP: 2,
+        MOUSE_RIGHT_DOWN: 3,
+        MOUSE_RIGHT_UP: 4,
+        MOUSE_ENTER: 5,
+        MOUSE_LEAVE: 6,
         WHEEL: 7,
         KEYDOWN: 8,
         KEYUP: 9,
@@ -452,6 +466,19 @@ document.createInputManager = function (callback) {
         TOUCH_MOVE: 16
     };
 
+    document.addEventListener('mousedown', function (e) {
+        if (!e.isHandled) {
+            switch (e.button) {
+                case 0:
+                    callback('', EVENTS.MOUSE_LEFT_DOWN);
+                    break;
+                case 2:
+                    callback('', EVENTS.MOUSE_RIGHT_DOWN);
+                    break;
+            }
+        }
+    });
+
     document.inputManager = {
         addListeners: function (element, isFocusable) {
             const view = typeof element === 'string' ? document.getElementById(element) : element;
@@ -462,10 +489,10 @@ document.createInputManager = function (callback) {
                     e.isHandled = true;
                     switch (e.button) {
                         case 0:
-                            callback(this.id, EVENTS.POINTER_LEFT_DOWN, e);
+                            callback(this.id, EVENTS.MOUSE_LEFT_DOWN, e);
                             break;
                         case 2:
-                            callback(this.id, EVENTS.POINTER_RIGHT_DOWN, e);
+                            callback(this.id, EVENTS.MOUSE_RIGHT_DOWN, e);
                             break;
                     }
                 }
@@ -476,10 +503,10 @@ document.createInputManager = function (callback) {
                     e.isHandled = true;
                     switch (e.button) {
                         case 0:
-                            callback(this.id, EVENTS.POINTER_LEFT_UP, e);
+                            callback(this.id, EVENTS.MOUSE_LEFT_UP, e);
                             break;
                         case 2:
-                            callback(this.id, EVENTS.POINTER_RIGHT_UP, e);
+                            callback(this.id, EVENTS.MOUSE_RIGHT_UP, e);
                             break;
                     }
                 }
@@ -488,7 +515,7 @@ document.createInputManager = function (callback) {
             view.addEventListener('mousemove', function (e) {
                 if (!e.isHandled) {
                     e.isHandled = true;
-                    callback(this.id, EVENTS.POINTER_MOVE, e);
+                    callback(this.id, EVENTS.MOUSE_MOVE, e);
                 }
             });
 
@@ -500,11 +527,11 @@ document.createInputManager = function (callback) {
             });
 
             view.addEventListener('mouseenter', function (e) {
-                callback(this.id, EVENTS.POINTER_ENTER, e);
+                callback(this.id, EVENTS.MOUSE_ENTER, e);
             });
 
             view.addEventListener('mouseleave', function (e) {
-                callback(this.id, EVENTS.POINTER_LEAVE, e);
+                callback(this.id, EVENTS.MOUSE_LEAVE, e);
             });
 
             if (isTouchDevice()) {
@@ -556,7 +583,7 @@ document.createInputManager = function (callback) {
                 view.addEventListener('keyup', function (e) {
                     if (!e.isHandled) {
                         e.isHandled = true;
-                        callback(this.id, EVENTS.KEYPRESS, e);
+                        callback(this.id, EVENTS.KEYUP, e);
                     }
                 });
 

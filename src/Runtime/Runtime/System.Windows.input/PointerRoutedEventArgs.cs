@@ -1,5 +1,4 @@
 ﻿
-
 /*===================================================================================
 * 
 *   Copyright (c) Userware/OpenSilver.net
@@ -12,22 +11,16 @@
 *  
 \*====================================================================================*/
 
-
-using CSHTML5;
-using CSHTML5.Internal;
 using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
 using System.Globalization;
+using CSHTML5;
+
 #if MIGRATION
-using System.Windows.Media;
+using System.Windows.Controls.Primitives;
 #else
-using Windows.UI.Xaml.Media;
+using Windows.UI.Xaml.Controls.Primitives;
 using Windows.Foundation;
 using Windows.System;
-//using Windows.System;
 using Windows.UI.Input;
 #endif
 
@@ -42,10 +35,9 @@ namespace Windows.UI.Xaml.Input
     /// elements, such as PointerPressed.
     /// </summary>
 #if MIGRATION
-    public partial class MouseEventArgs : RoutedEventArgs
-
+    public class MouseEventArgs : RoutedEventArgs
 #else
-    public partial class PointerRoutedEventArgs : RoutedEventArgs
+    public class PointerRoutedEventArgs : RoutedEventArgs
 #endif
     {
         internal override void InvokeHandler(Delegate handler, object target)
@@ -221,38 +213,15 @@ namespace Windows.UI.Xaml.Input
             }
         }
 
-        Pointer _pointer;
-
         /// <summary>
         /// Gets a reference to a pointer token.
         /// </summary>
-        public Pointer Pointer
-        {
-            get { return _pointer; }
-            internal set { _pointer = value; }
-        }
+        public Pointer Pointer { get; internal set; }
 
-
-        int _clickCount = 1;
         /// <summary>
         /// Gets the number of times the button was clicked.
         /// </summary>
-        public int ClickCount { get { return _clickCount; } }
-
-        internal void RefreshClickCount(UIElement sender)
-        {
-            int currentDate = Environment.TickCount;
-            if (currentDate - sender.INTERNAL_lastClickDate > 400) //Note: the duration is apparently dependent on the system's double click but there is apparently no way to get it. mine defaulted to 500ms but I feel it's too long so 400 it is.
-            {
-                sender.INTERNAL_clickCount = 1;
-            }
-            else
-            {
-                ++sender.INTERNAL_clickCount;
-            }
-            sender.INTERNAL_lastClickDate = currentDate;
-            _clickCount = sender.INTERNAL_clickCount;
-        }
+        public int ClickCount { get; internal set; }
 
         /// <summary>
         /// Returns the pointer position for this event occurrence, optionally evaluated
@@ -276,15 +245,23 @@ namespace Windows.UI.Xaml.Input
         public PointerPoint GetCurrentPoint(UIElement relativeTo)
         {
             PointerPoint pointerPoint = new PointerPoint();
-            pointerPoint.Properties.MouseWheelDelta = PointerPointProperties.GetPointerWheelDelta(INTERNAL_OriginalJSEventArg);
+            pointerPoint.Properties.MouseWheelDelta = PointerPointProperties.GetPointerWheelDelta(UIEventArg);
             pointerPoint.Position = GetPosition(new Point(_pointerAbsoluteX, _pointerAbsoluteY), relativeTo);
 
             return pointerPoint;
         }
+
+        internal Point GetPosition(UIElement relativeTo)
+            => GetPosition(new Point(_pointerAbsoluteX, _pointerAbsoluteY), relativeTo);
 #endif
 
         internal static Point GetPosition(Point origin, UIElement relativeTo)
         {
+            if (relativeTo is Popup popup)
+            {
+                relativeTo = popup.IsOpen ? popup.Child : null;
+            }
+
             if (relativeTo == null)
             {
                 //-----------------------------------
