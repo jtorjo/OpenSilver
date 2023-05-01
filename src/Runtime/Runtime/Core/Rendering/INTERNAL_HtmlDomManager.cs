@@ -355,6 +355,12 @@ setTimeout(function(){{ var element2 = document.getElementById(""{uniqueIdentifi
                 INTERNAL_ExecuteJavaScript.QueueExecuteJavaScript(javaScriptCodeToExecute);
         }
 
+        internal static void RemoveAttribute(object domElement, string attributeName)
+        {
+            string sElement = INTERNAL_InteropImplementation.GetVariableStringForJS(domElement);
+            OpenSilver.Interop.ExecuteJavaScriptVoid($"{sElement}.removeAttribute('{attributeName}');");
+        }
+
         public static object GetDomElementAttribute(object domElementRef, string attributeName)
         {
             string sElement = INTERNAL_InteropImplementation.GetVariableStringForJS(domElementRef);
@@ -768,8 +774,7 @@ parentElement.appendChild(child);";
                     default:
                         if (c < ' ')
                         {
-                            t = "000" + string.Format("X", c);
-                            sb.Append("\\u" + t.Substring(t.Length - 4));
+                            sb.Append($"\\u{(int)c:x4}");
                         }
                         else
                         {
