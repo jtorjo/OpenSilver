@@ -162,7 +162,8 @@ document.getActualWidthAndHeight = function (element) {
 document.createElementSafe = function (tagName, id, parentElement, index) {
     const newElement = document.createElement(tagName);
 
-    newElement.setAttribute("id", id);
+    newElement.setAttribute('id', id);
+    newElement.setAttribute('xamlid', id);
 
     if (typeof parentElement == 'string') {
         parentElement = document.getElementById(parentElement);
@@ -204,6 +205,7 @@ document.createPopupRootElement = function (id, rootElement, pointerEvents) {
 
     const popupRoot = document.createElement('div');
     popupRoot.setAttribute('id', id);
+    popupRoot.setAttribute('xamlid', id);
     popupRoot.style.position = 'absolute';
     popupRoot.style.width = '100%';
     popupRoot.style.height = '100%';
@@ -417,6 +419,18 @@ document.createInputManager = function (root, callback) {
             _modifiers |= MODIFIERKEYS.WINDOWS;
     };
 
+    function getClosestElementId(element) {
+        while (element) {
+            if (element.hasAttribute('xamlid')) {
+                return element.getAttribute('xamlid');
+            }
+
+            element = element.parentElement;
+        }
+
+        return '';
+    };
+
     function initDom(root) {
 
         // Make sure the root div is keyboard focusable, so that we can tab into the app.
@@ -441,10 +455,10 @@ document.createInputManager = function (root, callback) {
                 if (target !== null) {
                     switch (e.button) {
                         case 0:
-                            callback(target.id, EVENTS.MOUSE_LEFT_UP, e);
+                            callback(getClosestElementId(target), EVENTS.MOUSE_LEFT_UP, e);
                             break;
                         case 2:
-                            callback(target.id, EVENTS.MOUSE_RIGHT_UP, e);
+                            callback(getClosestElementId(target), EVENTS.MOUSE_RIGHT_UP, e);
                             break;
                     }
                 }
@@ -455,7 +469,7 @@ document.createInputManager = function (root, callback) {
             if (!e.isHandled) {
                 const target = _mouseCapture;
                 if (target !== null) {
-                    callback(target.id, EVENTS.MOUSE_MOVE, e);
+                    callback(getClosestElementId(target), EVENTS.MOUSE_MOVE, e);
                 }
             }
         });
@@ -479,7 +493,7 @@ document.createInputManager = function (root, callback) {
             _modifiers = MODIFIERKEYS.NONE;
         });
 
-        root.addEventListener('focusin', function (e) { callback(e.target.id, EVENTS.FOCUS, e); });
+        root.addEventListener('focusin', function (e) { callback(getClosestElementId(e.target), EVENTS.FOCUS, e); });
     };
 
     initDom(root);
@@ -492,7 +506,7 @@ document.createInputManager = function (root, callback) {
             view.addEventListener('mousedown', function (e) {
                 if (!e.isHandled) {
                     e.isHandled = true;
-                    let id = (_mouseCapture === null || this === _mouseCapture) ? this.id : '';
+                    let id = (_mouseCapture === null || this === _mouseCapture) ? getClosestElementId(this) : '';
                     switch (e.button) {
                         case 0:
                             callback(id, EVENTS.MOUSE_LEFT_DOWN, e);
@@ -510,10 +524,10 @@ document.createInputManager = function (root, callback) {
                     const target = _mouseCapture || this;
                     switch (e.button) {
                         case 0:
-                            callback(target.id, EVENTS.MOUSE_LEFT_UP, e);
+                            callback(getClosestElementId(target), EVENTS.MOUSE_LEFT_UP, e);
                             break;
                         case 2:
-                            callback(target.id, EVENTS.MOUSE_RIGHT_UP, e);
+                            callback(getClosestElementId(target), EVENTS.MOUSE_RIGHT_UP, e);
                             break;
                     }
                 }
@@ -523,26 +537,26 @@ document.createInputManager = function (root, callback) {
                 if (!e.isHandled) {
                     e.isHandled = true;
                     const target = _mouseCapture || this;
-                    callback(target.id, EVENTS.MOUSE_MOVE, e);
+                    callback(getClosestElementId(target), EVENTS.MOUSE_MOVE, e);
                 }
             });
 
             view.addEventListener('wheel', function (e) {
                 if (!e.isHandled) {
                     e.isHandled = true;
-                    callback(this.id, EVENTS.WHEEL, e);
+                    callback(getClosestElementId(this), EVENTS.WHEEL, e);
                 }
             });
 
             view.addEventListener('mouseenter', function (e) {
                 if (_mouseCapture === null || this === _mouseCapture) {
-                    callback(this.id, EVENTS.MOUSE_ENTER, e);
+                    callback(getClosestElementId(this), EVENTS.MOUSE_ENTER, e);
                 }
             });
 
             view.addEventListener('mouseleave', function (e) {
                 if (_mouseCapture === null || this === _mouseCapture) {
-                    callback(this.id, EVENTS.MOUSE_LEAVE, e);
+                    callback(getClosestElementId(this), EVENTS.MOUSE_LEAVE, e);
                 }
             });
 
@@ -550,14 +564,14 @@ document.createInputManager = function (root, callback) {
                 view.addEventListener('touchstart', function (e) {
                     if (!e.isHandled) {
                         e.isHandled = true;
-                        callback(this.id, EVENTS.TOUCH_START, e);
+                        callback(getClosestElementId(this), EVENTS.TOUCH_START, e);
                     }
                 }, { passive: true });
 
                 view.addEventListener('touchend', function (e) {
                     if (!e.isHandled) {
                         e.isHandled = true;
-                        callback(this.id, EVENTS.TOUCH_END, e);
+                        callback(getClosestElementId(this), EVENTS.TOUCH_END, e);
                         e.preventDefault();
                     }
                 });
@@ -565,7 +579,7 @@ document.createInputManager = function (root, callback) {
                 view.addEventListener('touchmove', function (e) {
                     if (!e.isHandled) {
                         e.isHandled = true;
-                        callback(this.id, EVENTS.TOUCH_MOVE, e);
+                        callback(getClosestElementId(this), EVENTS.TOUCH_MOVE, e);
                     }
                 }, { passive: true });
             }
@@ -574,14 +588,14 @@ document.createInputManager = function (root, callback) {
                 view.addEventListener('keypress', function (e) {
                     if (!e.isHandled) {
                         e.isHandled = true;
-                        callback(this.id, EVENTS.KEYPRESS, e);
+                        callback(getClosestElementId(this), EVENTS.KEYPRESS, e);
                     }
                 });
 
                 view.addEventListener('input', function (e) {
                     if (!e.isHandled) {
                         e.isHandled = true;
-                        callback(this.id, EVENTS.INPUT, e);
+                        callback(getClosestElementId(this), EVENTS.INPUT, e);
                     }
                 });
 
@@ -589,7 +603,7 @@ document.createInputManager = function (root, callback) {
                     if (!e.isHandled) {
                         e.isHandled = true;
                         setModifiers(e);
-                        callback(this.id, EVENTS.KEYDOWN, e);
+                        callback(getClosestElementId(this), EVENTS.KEYDOWN, e);
                     }
                 });
 
@@ -597,7 +611,7 @@ document.createInputManager = function (root, callback) {
                     if (!e.isHandled) {
                         e.isHandled = true;
                         setModifiers(e);
-                        callback(this.id, EVENTS.KEYUP, e);
+                        callback(getClosestElementId(this), EVENTS.KEYUP, e);
                     }
                 });
             }
@@ -1458,7 +1472,7 @@ document.velocityHelpers = (function () {
 })();
 
 document.browserService = (function () {
-    const TYPES = {
+    const JSTYPE = {
         ERROR: -1,
         VOID: 0,
         STRING: 1,
@@ -1472,9 +1486,122 @@ document.browserService = (function () {
         HTMLWINDOW: 9,
     };
 
+    const INTEROP_RESULT = {
+        ERROR: 0,
+        VOID: 1,
+        OBJECT: 2,
+        MEMBER: 3,
+    };
+
     let _id = 0;
     const _idToObj = new Map();
     const _objToId = new Map();
+
+    let _isInitialized = false;
+    let _getMemberCallback = null;
+    let _setPropertyCallback = null;
+    let _invokeMethodCallback = null;
+    let _addEventListenerCallback = null;
+
+    function checkInitialized() {
+        if (!_isInitialized) {
+            throw new Error('browserService has not been initialized yet.');
+        }
+    };
+
+    function createManagedObject(id, isDelegate) {
+        const o = isDelegate ? function () { } : {};
+        o.id = id;
+        Object.defineProperty(o, 'id', { writable: false });
+
+        const handler = {
+            get: function (target, prop, receiver) {
+                switch (prop) {
+                    case 'addEventListener':
+                        return function (event, handler) {
+                            const r = addDotNetEventListener(target, event, JSON.stringify(conv(handler)));
+                            switch (r.type) {
+                                case INTEROP_RESULT.ERROR:
+                                    throw new Error(r.value);
+                            }
+                        };
+                    case 'removeEventListener':
+                        return function (event, handler) {
+                            const r = removeDotNetEventListener(target, event, JSON.stringify(conv(handler)));
+                            switch (r.type) {
+                                case INTEROP_RESULT.ERROR:
+                                    throw new Error(r.value);
+                            }
+                        };
+                    default:
+                        const r = getDotNetMember(target, prop);
+                        switch (r.type) {
+                            case INTEROP_RESULT.ERROR:
+                                throw new Error(r.value);
+                            case INTEROP_RESULT.OBJECT:
+                                return r.value;
+                            case INTEROP_RESULT.MEMBER:
+                                return function (...args) {
+                                    const r = invokeDotNetMethod(target, prop, JSON.stringify(args.map(function (x) { return conv(x); })));
+                                    switch (r.type) {
+                                        case INTEROP_RESULT.ERROR:
+                                            throw new Error(r.value);
+                                        case INTEROP_RESULT.OBJECT:
+                                            return r.value;
+                                    }
+                                };
+                        }
+                }
+            },
+            set: function (target, prop, value, receiver) {
+                const r = setDotNetProperty(target, prop, JSON.stringify(conv(value)));
+                switch (r.type) {
+                    case INTEROP_RESULT.ERROR:
+                        throw new Error(r.value);
+                }
+                return true;
+            },
+        };
+
+        if (isDelegate) {
+            handler.apply = function (target, thisArg, argumentsList) {
+                const r = invokeDotNetMethod(target, '', JSON.stringify(argumentsList.map(function (x) { return conv(x); })));
+                switch (r.type) {
+                    case INTEROP_RESULT.ERROR:
+                        throw new Error(r.value);
+                    case INTEROP_RESULT.OBJECT:
+                        return r.value;
+                }
+            };
+        }
+
+        return new Proxy(o, handler);
+    };
+
+    function getDotNetMember(managedObject, name) {
+        const str_result = _getMemberCallback(managedObject.id, name);
+        return eval(str_result);
+    };
+
+    function invokeDotNetMethod(managedObject, name, args) {
+        const str_result = _invokeMethodCallback(managedObject.id, name, args);
+        return eval(str_result);
+    };
+
+    function setDotNetProperty(managedObject, name, value) {
+        const str_result = _setPropertyCallback(managedObject.id, name, value);
+        return eval(str_result);
+    };
+
+    function addDotNetEventListener(managedObject, event, handler) {
+        const str_result = _addEventListenerCallback(managedObject.id, event, handler, true);
+        return eval(str_result);
+    };
+
+    function removeDotNetEventListener(managedObject, event, handler) {
+        const str_result = _addEventListenerCallback(managedObject.id, event, handler, false);
+        return eval(str_result);
+    };
 
     function getOrCreateId(obj) {
         if (!_objToId.has(obj)) {
@@ -1487,43 +1614,53 @@ document.browserService = (function () {
     };
 
     function isDOMCollection(v) {
-        return v instanceof HTMLCollection ||
-               v instanceof NodeList;
+        return v instanceof HTMLCollection || v instanceof NodeList;
     };
 
     function conv(v) {
         if (v instanceof Document) {
-            return { Type: TYPES.HTMLDOCUMENT };
+            return { Type: JSTYPE.HTMLDOCUMENT };
         } else if (v instanceof Window) {
-            return { Type: TYPES.HTMLWINDOW };
+            return { Type: JSTYPE.HTMLWINDOW };
         } else if (v instanceof HTMLElement) {
-            return { Type: TYPES.HTMLELEMENT, Value: getOrCreateId(v) };
+            return { Type: JSTYPE.HTMLELEMENT, Value: getOrCreateId(v) };
         } else if (isDOMCollection(v)) {
-            return { Type: TYPES.HTMLCOLLECTION, Value: getOrCreateId(v) };
+            return { Type: JSTYPE.HTMLCOLLECTION, Value: getOrCreateId(v) };
         } else if (typeof v === 'number') {
             if (Number.isInteger(v))
-                return { Type: TYPES.INTEGER, Value: v.toString() };
+                return { Type: JSTYPE.INTEGER, Value: v.toString() };
             else
-                return { Type: TYPES.DOUBLE, Value: v.toString() };
+                return { Type: JSTYPE.DOUBLE, Value: v.toString() };
         } else if (typeof v === 'string') {
-            return { Type: TYPES.STRING, Value: v };
+            return { Type: JSTYPE.STRING, Value: v };
         } else if (typeof v === 'boolean') {
-            return { Type: TYPES.BOOLEAN, Value: v.toStrin_dependentListMapg() };
+            return { Type: JSTYPE.BOOLEAN, Value: v.toString() };
         } else if (v === null || v === undefined) {
-            return { Type: TYPES.VOID };
+            return { Type: JSTYPE.VOID };
         } else if (typeof v === 'object' || typeof v === 'function') {
-            return { Type: TYPES.OBJECT, Value: getOrCreateId(v) };
+            return { Type: JSTYPE.OBJECT, Value: getOrCreateId(v) };
         } else {
-            return { Type: TYPES.ERROR, Value: 'An unexpected error occurred' };
+            return { Type: JSTYPE.ERROR, Value: 'An unexpected error occurred' };
         }
     };
 
     function error(message) {
-        return { Type: TYPES.ERROR, Value: message };
+        return { Type: JSTYPE.ERROR, Value: message };
     };
 
     return {
+        initialize: function (getMemberCallback, setPropertyCallback, invokeMethodCallback, addEventListenerCallback) {
+            if (_isInitialized) {
+                throw new Error('browserService can only be initialized once.');
+            }
+            _isInitialized = true;
+            _getMemberCallback = getMemberCallback;
+            _setPropertyCallback = setPropertyCallback;
+            _invokeMethodCallback = invokeMethodCallback;
+            _addEventListenerCallback = addEventListenerCallback;
+        },
         invoke: function (instance, name, ...args) {
+            checkInitialized();
             const m = instance[name];
             if (m) {
                 try {
@@ -1537,6 +1674,7 @@ document.browserService = (function () {
             }
         },
         invokeSelf: function (f, ...args) {
+            checkInitialized();
             if (typeof f === 'function') {
                 try {
                     const r = f.call(null, ...args);
@@ -1549,6 +1687,7 @@ document.browserService = (function () {
             }
         },
         getProperty: function (instance, name) {
+            checkInitialized();
             try {
                 return JSON.stringify(conv(instance[name]));
             } catch (err) {
@@ -1556,6 +1695,7 @@ document.browserService = (function () {
             }
         },
         setProperty: function (instance, name, value) {
+            checkInitialized();
             try {
                 instance[name] = value;
                 return JSON.stringify(conv(undefined));
@@ -1564,14 +1704,24 @@ document.browserService = (function () {
             }
         },
         getObject: function (id) {
+            checkInitialized();
             return _idToObj.get(id);
         },
         releaseObject: function (id) {
+            checkInitialized();
             if (_idToObj.has(id)) {
                 const o = _idToObj.get(id);
                 _objToId.delete(o);
                 _idToObj.delete(id);
             }
+        },
+        registerManagedObject: function (isDelegate) {
+            checkInitialized();
+            const id = (_id++).toString();
+            const managedObject = createManagedObject(id, isDelegate);
+            _objToId.set(managedObject, id);
+            _idToObj.set(id, managedObject);
+            return id;
         },
     };
 })();
