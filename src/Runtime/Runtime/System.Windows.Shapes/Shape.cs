@@ -128,7 +128,7 @@ namespace Windows.UI.Xaml.Shapes
                 typeof(Shape),
                 new FrameworkPropertyMetadata(Stretch.None, FrameworkPropertyMetadataOptions.AffectsMeasure | FrameworkPropertyMetadataOptions.AffectsRender, Stretch_Changed));
 
-        internal protected static void Stretch_Changed(DependencyObject d, DependencyPropertyChangedEventArgs e)
+        protected internal static void Stretch_Changed(DependencyObject d, DependencyPropertyChangedEventArgs e)
         {
             //note: Stretch is actually more implemented in the Redraw method of the classes that inherit from shape (Line, Ellipse, Path, Rectangle)
 
@@ -318,38 +318,37 @@ namespace Windows.UI.Xaml.Shapes
         /// </summary>
         public DoubleCollection StrokeDashArray
         {
-            get
-            {
-                var collection = (DoubleCollection)GetValue(StrokeDashArrayProperty);
-                if (collection == null)
-                {
-                    collection = new DoubleCollection();
-                    _suspendRendering = true;
-                    SetValue(StrokeDashArrayProperty, collection);
-                    _suspendRendering = false;
-                }
-                return collection;
-            }
+            get { return (DoubleCollection)GetValue(StrokeDashArrayProperty); }
             set { SetValue(StrokeDashArrayProperty, value); }
         }
 
         /// <summary>
-        /// Identifies the <see cref="Shape.StrokeDashArray"/> dependency property.
+        /// Identifies the <see cref="StrokeDashArray"/> dependency property.
         /// </summary>
         public static readonly DependencyProperty StrokeDashArrayProperty =
             DependencyProperty.Register(
                 nameof(StrokeDashArray), 
                 typeof(DoubleCollection), 
                 typeof(Shape), 
-                new PropertyMetadata(null, StrokeDashArray_Changed));
+                new PropertyMetadata(
+                    new PFCDefaultValueFactory<double>(
+                        static () => new DoubleCollection(),
+                        static (d, dp) => new DoubleCollection()),
+                    OnStrokeDashArrayChanged,
+                    CoerceStrokeDashArray));
 
-        private static void StrokeDashArray_Changed(DependencyObject d, DependencyPropertyChangedEventArgs e)
+        private static void OnStrokeDashArrayChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
         {
             Shape shape = (Shape)d;
             if (INTERNAL_VisualTreeManager.IsElementInVisualTree(shape))
             {
                 shape.ScheduleRedraw();
             }
+        }
+
+        private static object CoerceStrokeDashArray(DependencyObject d, object baseValue)
+        {
+            return baseValue ?? new DoubleCollection();
         }
 
         /// <summary>
@@ -401,17 +400,17 @@ namespace Windows.UI.Xaml.Shapes
 
         #region Protected Methods
 
-        internal protected virtual void Redraw()
+        protected internal virtual void Redraw()
         {
             _redrawWhenBecomeVisible = false;
         }
 
-        internal protected virtual void ManageStrokeChanged()
+        protected internal virtual void ManageStrokeChanged()
         {
             ScheduleRedraw();
         }
 
-        internal protected virtual void ManageStrokeThicknessChanged()
+        protected internal virtual void ManageStrokeThicknessChanged()
         {
             if (INTERNAL_VisualTreeManager.IsElementInVisualTree(this))
             {

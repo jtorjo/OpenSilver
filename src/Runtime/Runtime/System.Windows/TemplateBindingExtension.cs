@@ -42,12 +42,11 @@ namespace Windows.UI.Xaml
         {
             if (serviceProvider.GetService(typeof(IProvideValueTarget)) is IProvideValueTarget provider)
             {
-                if (provider.TargetObject is Control source)
+                if (provider.TargetObject is IInternalControl source)
                 {
                     string propertyName = DependencyPropertyName ?? Path;
                     Type type = DependencyPropertyOwnerType ?? source.GetType();
-                    DependencyProperty dp = INTERNAL_TypeToStringsToDependencyProperties.GetPropertyInTypeOrItsBaseTypes(
-                        type, propertyName);
+                    DependencyProperty dp = DependencyProperty.FromName(propertyName, type);
 
                     if (dp != null)
                     {

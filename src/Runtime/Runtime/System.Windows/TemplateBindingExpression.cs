@@ -15,7 +15,6 @@
 using System;
 using System.ComponentModel;
 using System.Diagnostics;
-using CSHTML5.Internal;
 using OpenSilver.Internal.Data;
 
 #if MIGRATION
@@ -35,14 +34,14 @@ namespace Windows.UI.Xaml
     /// </summary>
     public class TemplateBindingExpression : Expression
     {
-        private readonly Control _source;
+        private readonly IInternalControl _source;
         private readonly DependencyProperty _sourceProperty;
         private DependencyObject _target;
         private DependencyProperty _targetProperty;
         private DependencyPropertyChangedListener _listener;
         private bool _skipTypeCheck;
 
-        internal TemplateBindingExpression(Control templatedParent, DependencyProperty sourceDP)
+        internal TemplateBindingExpression(IInternalControl templatedParent, DependencyProperty sourceDP)
         {
             _source = templatedParent ?? throw new ArgumentNullException(nameof(templatedParent));
             _sourceProperty = sourceDP ?? throw new ArgumentNullException(nameof(sourceDP));
@@ -62,7 +61,7 @@ namespace Windows.UI.Xaml
             }
 
             // Note: consider caching the default value as we should always have d == Target.
-            return _targetProperty.GetMetadata(_target.GetType()).DefaultValue; 
+            return _targetProperty.GetDefaultValue(_target);
         }
 
         internal override void OnAttach(DependencyObject d, DependencyProperty dp)
@@ -79,7 +78,7 @@ namespace Windows.UI.Xaml
             _targetProperty = dp;
 
             _skipTypeCheck = _targetProperty.PropertyType.IsAssignableFrom(_sourceProperty.PropertyType);
-            _listener = new DependencyPropertyChangedListener(_source, _sourceProperty, OnPropertyChanged);
+            _listener = new DependencyPropertyChangedListener((DependencyObject)_source, _sourceProperty, OnPropertyChanged);
         }
 
         internal override void OnDetach(DependencyObject d, DependencyProperty dp)
@@ -107,7 +106,7 @@ namespace Windows.UI.Xaml
 
         private bool ValidateValue(ref object value, DependencyProperty targetProperty)
         {
-            if (DependencyProperty.IsValueTypeValid(value, targetProperty.PropertyType))
+            if (targetProperty.IsValidValue(value))
             {
                 return true;
             }

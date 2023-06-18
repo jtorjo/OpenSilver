@@ -104,7 +104,7 @@ namespace Windows.UI.Xaml.Controls.Primitives
         {
             PopupRoot popupRoot = (PopupRoot)d;
             popupRoot.TemplateChild = null;
-            if (popupRoot.IsConnectedToLiveTree)
+            if (INTERNAL_VisualTreeManager.IsElementInVisualTree(popupRoot))
             {
                 popupRoot.InvalidateMeasureInternal();
             }
@@ -225,7 +225,7 @@ namespace Windows.UI.Xaml.Controls.Primitives
                 Seal();
             }
 
-            internal override bool BuildVisualTree(FrameworkElement container)
+            internal override bool BuildVisualTree(IInternalFrameworkElement container)
             {
                 container.TemplateChild = ((PopupRoot)container).Content as FrameworkElement;
                 return false;

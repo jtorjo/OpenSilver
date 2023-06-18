@@ -54,7 +54,7 @@ namespace Windows.UI.Xaml.Media.Animation
         /// Gets the collection of child Timeline objects.
         /// </summary>
         public TimelineCollection Children
-            => _children ?? (_children = new TimelineCollection(this));
+            => _children ??= new TimelineCollection(this);
 
         /// <summary>
         /// Gets the value of the Storyboard.TargetName XAML attached property from a
@@ -400,7 +400,7 @@ namespace Windows.UI.Xaml.Media.Animation
             }
         }
 
-        private static DependencyObject ResolveTargetName(string targetName, FrameworkElement fe, INameResolver nameResolver)
+        private static DependencyObject ResolveTargetName(string targetName, IInternalFrameworkElement fe, INameResolver nameResolver)
         {
             object namedObject;
             DependencyObject targetObject;

@@ -49,14 +49,12 @@ namespace Windows.UI.Xaml
     {
         #region Inheritance Context
 
-        internal static FrameworkElement FindMentor(DependencyObject d)
+        internal static IInternalFrameworkElement FindMentor(DependencyObject d)
         {
             // Find the nearest FE InheritanceContext
             while (d != null)
             {
-                FrameworkElement fe = d as FrameworkElement;
-
-                if (fe != null)
+                if (d is IInternalFrameworkElement fe)
                 {
                     return fe;
                 }
@@ -74,12 +72,12 @@ namespace Windows.UI.Xaml
             return base.ShouldProvideInheritanceContext(target, property) || property == ResourceDictionary.ResourceKeyProperty;
         }
 
-        internal FrameworkElement InheritedParent { get; private set; }
+        internal IInternalFrameworkElement InheritedParent { get; private set; }
 
         internal override void OnInheritanceContextChangedCore(EventArgs args)
         {
-            FrameworkElement oldMentor = InheritedParent;
-            FrameworkElement newMentor = FindMentor(InheritanceContext);
+            IInternalFrameworkElement oldMentor = InheritedParent;
+            IInternalFrameworkElement newMentor = FindMentor(InheritanceContext);
 
             if (oldMentor != newMentor)
             {
@@ -97,18 +95,18 @@ namespace Windows.UI.Xaml
             }
         }
 
-        private void ConnectMentor(FrameworkElement mentor)
+        private void ConnectMentor(IInternalFrameworkElement mentor)
         {
             mentor.InheritedPropertyChanged += new InheritedPropertyChangedEventHandler(OnMentorInheritedPropertyChanged);
             
-            InvalidateInheritedProperties(this, mentor);
+            InvalidateInheritedProperties(this, mentor.AsDependencyObject());
         }
 
-        private void DisconnectMentor(FrameworkElement mentor)
+        private void DisconnectMentor(IInternalFrameworkElement mentor)
         {
             mentor.InheritedPropertyChanged -= new InheritedPropertyChangedEventHandler(OnMentorInheritedPropertyChanged);
 
-            InvalidateInheritedProperties(this, mentor);
+            InvalidateInheritedProperties(this, mentor.AsDependencyObject());
         }
 
         // handle the InheritedPropertyChanged event from the mentor
@@ -204,8 +202,7 @@ namespace Windows.UI.Xaml
 
                 HasLogicalChildren = true;
 
-                FrameworkElement fe = child as FrameworkElement;
-                if (fe != null)
+                if (child is IInternalFrameworkElement fe)
                 {
                     fe.ChangeLogicalParent(this);
                 }
@@ -223,7 +220,7 @@ namespace Windows.UI.Xaml
                     throw new InvalidOperationException("Cannot modify the logical children for this node at this time because a tree walk is in progress.");
                 }
 
-                if (child is FrameworkElement fe && fe.Parent == this)
+                if (child is IInternalFrameworkElement fe && fe.Parent == this)
                 {
                     fe.ChangeLogicalParent(null);
                 }
@@ -270,11 +267,11 @@ namespace Windows.UI.Xaml
             InvalidateInheritedProperties(this, parent);
         }
 
-        internal static void InvalidateInheritedProperties(UIElement uie, DependencyObject newParent)
+        internal static void InvalidateInheritedProperties(FrameworkElement fe, DependencyObject newParent)
         {
             if (newParent == null)
             {
-                uie.ResetInheritedProperties();
+                fe.ResetInheritedProperties();
             }
             else
             {
@@ -283,9 +280,15 @@ namespace Windows.UI.Xaml
                     DependencyProperty dp = kvp.Key;
                     INTERNAL_PropertyStorage storage = kvp.Value;
 
-                    uie.SetInheritedValue(dp,
-                        INTERNAL_PropertyStore.GetEffectiveValue(storage.Entry),
-                        true);
+                    PropertyMetadata metadata = dp.GetMetadata(fe.DependencyObjectType);
+                    if (TreeWalkHelper.IsInheritanceNode(metadata))
+                    {
+                        fe.SetInheritedValue(
+                            dp,
+                            metadata,
+                            INTERNAL_PropertyStore.GetEffectiveValue(storage.Entry),
+                            true);
+                    }
                 }
             }
         }
@@ -373,8 +376,7 @@ namespace Windows.UI.Xaml
         {
             // Initialize the _styleCache to the default value for StyleProperty.
             // If the default value is non-null then wire it to the current instance.
-            PropertyMetadata metadata = StyleProperty.GetMetadata(this.GetType());
-            Style defaultValue = (Style)metadata.DefaultValue;
+            Style defaultValue = (Style)StyleProperty.GetDefaultValue(this);
             if (defaultValue != null)
             {
                 OnStyleChanged(this, new DependencyPropertyChangedEventArgs(null, defaultValue, StyleProperty));
@@ -455,7 +457,7 @@ namespace Windows.UI.Xaml
                     HasStyleInvalidated = false;
 
                     if (HasImplicitStyleFromResources == true &&
-                        (oldValue.Contains(GetType()) || Style == StyleProperty.GetMetadata(GetType()).DefaultValue))
+                        (oldValue.Contains(GetType()) || Style == StyleProperty.GetDefaultValue(this)))
                     {
                         UpdateStyleProperty();
                     }
@@ -798,7 +800,7 @@ namespace Windows.UI.Xaml
             element.ManageIsEnabled((bool)newValue);
         }
 
-        internal protected virtual void ManageIsEnabled(bool isEnabled)
+        protected internal virtual void ManageIsEnabled(bool isEnabled)
         {
             if (INTERNAL_VisualTreeManager.IsElementInVisualTree(this))
             {
@@ -1091,7 +1093,7 @@ namespace Windows.UI.Xaml
                 return;
             }
 
-            var metadata = e.Property.GetMetadata(GetType()) as FrameworkPropertyMetadata;
+            var metadata = e.Property.GetMetadata(DependencyObjectType) as FrameworkPropertyMetadata;
             
             if (metadata != null)
             {

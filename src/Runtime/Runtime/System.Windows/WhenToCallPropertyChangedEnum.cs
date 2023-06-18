@@ -1,5 +1,4 @@
 ﻿
-
 /*===================================================================================
 * 
 *   Copyright (c) Userware/OpenSilver.net
@@ -12,12 +11,9 @@
 *  
 \*====================================================================================*/
 
-
 using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
+using System.ComponentModel;
+using OpenSilver.Internal;
 
 #if MIGRATION
 namespace System.Windows
@@ -27,8 +23,10 @@ namespace Windows.UI.Xaml
 {
     public enum WhenToCallPropertyChangedEnum
     {
-        Always, //todo: implement this
-        IfPropertyIsSet,
-        Never
+        Never = 0,
+        IfPropertyIsSet = 1,
+        [Obsolete(Helper.ObsoleteMemberMessage)]
+        [EditorBrowsable(EditorBrowsableState.Never)]
+        Always = 2,
     }
 }

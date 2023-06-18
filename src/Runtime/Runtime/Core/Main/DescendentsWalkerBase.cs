@@ -28,7 +28,7 @@ namespace OpenSilver.Internal
 #if WPF
             _nodes = new FrugalStructList<DependencyObject>();
 #else
-            _nodes = new List<DependencyObject>();
+            _nodes = new HashSet<DependencyObject>();
 #endif // WPF
         }
 
@@ -42,8 +42,7 @@ namespace OpenSilver.Internal
             {
                 DependencyObject logicalParent = null;
 
-                FrameworkElement fe = ancestor as FrameworkElement;
-                if (fe != null)
+                if (ancestor is IInternalFrameworkElement fe)
                 {
                     logicalParent = fe.Parent;
                     // FrameworkElement
@@ -72,7 +71,7 @@ namespace OpenSilver.Internal
 #if WPF
         internal FrugalStructList<DependencyObject> _nodes;
 #else
-        internal List<DependencyObject> _nodes;
+        internal HashSet<DependencyObject> _nodes;
 #endif // WPF
         internal int _recursionDepth;
     }

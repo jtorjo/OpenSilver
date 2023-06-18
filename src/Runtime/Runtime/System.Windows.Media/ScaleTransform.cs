@@ -1,5 +1,4 @@
 ﻿
-
 /*===================================================================================
 * 
 *   Copyright (c) Userware/OpenSilver.net
@@ -12,10 +11,9 @@
 *  
 \*====================================================================================*/
 
-
-using CSHTML5.Internal;
 using System;
 using System.Collections.Generic;
+using CSHTML5.Internal;
 
 #if !MIGRATION
 using Windows.Foundation;
@@ -30,7 +28,7 @@ namespace Windows.UI.Xaml.Media
     /// <summary>
     /// Scales an object in the two-dimensional x-y coordinate system.
     /// </summary>
-    public sealed partial class ScaleTransform : Transform
+    public sealed class ScaleTransform : Transform
     {
         double _appliedCssScaleX = 1d;
         double _appliedCssScaleY = 1d;
@@ -131,7 +129,7 @@ namespace Windows.UI.Xaml.Media
 
         private void ApplyCSSChanges(double scaleX, double scaleY)
         {
-            CSSEquivalent scaleXcssEquivalent = ScaleXProperty.GetTypeMetaData(typeof(ScaleTransform)).GetCSSEquivalent(this);
+            CSSEquivalent scaleXcssEquivalent = ScaleXProperty.GetMetadata(DependencyObjectType).GetCSSEquivalent(this);
             if (scaleXcssEquivalent != null)
             {
                 object domElementX = scaleXcssEquivalent.DomElement;
@@ -147,7 +145,7 @@ namespace Windows.UI.Xaml.Media
                 }
             }
 
-            CSSEquivalent scaleYcssEquivalent = ScaleYProperty.GetTypeMetaData(typeof(ScaleTransform)).GetCSSEquivalent(this);
+            CSSEquivalent scaleYcssEquivalent = ScaleYProperty.GetMetadata(DependencyObjectType).GetCSSEquivalent(this);
             if (scaleYcssEquivalent != null)
             {
                 object domElementY = scaleYcssEquivalent.DomElement;
@@ -189,6 +187,8 @@ namespace Windows.UI.Xaml.Media
                 return m;
             }
         }
+
+        internal override bool IsIdentity => ScaleX == 1 && ScaleY == 1;
 
         /// <summary>
         /// Identifies the <see cref="ScaleTransform.CenterX"/> dependency property.

@@ -24,9 +24,11 @@ using System.ComponentModel;
 #if MIGRATION
 using System.Windows.Media;
 using System.Windows.Data;
+using System.Windows.Documents;
 using System.Windows.Controls.Primitives;
 #else
 using Windows.UI.Text;
+using Windows.UI.Xaml.Documents;
 using Windows.UI.Xaml.Media;
 using Windows.UI.Xaml.Input;
 using Windows.Foundation;
@@ -43,7 +45,7 @@ namespace Windows.UI.Xaml.Controls
     /// Represents the base class for UI elements that use a ControlTemplate to define
     /// their appearance.
     /// </summary>
-    public partial class Control : FrameworkElement
+    public partial class Control : FrameworkElement, IInternalControl
     {
         //COMMENT 26.03.2020:
         // ERROR DESCRIPTION:
@@ -70,8 +72,7 @@ namespace Windows.UI.Xaml.Controls
         {
             // Initialize the _templateCache to the default value for TemplateProperty.
             // If the default value is non-null then wire it to the current instance.
-            PropertyMetadata metadata = TemplateProperty.GetMetadata(this.GetType());
-            ControlTemplate defaultValue = (ControlTemplate)metadata.DefaultValue;
+            ControlTemplate defaultValue = (ControlTemplate)TemplateProperty.GetDefaultValue(this);
             if (defaultValue != null)
             {
                 OnTemplateChanged(this, new DependencyPropertyChangedEventArgs(null, defaultValue, TemplateProperty));
@@ -193,22 +194,19 @@ namespace Windows.UI.Xaml.Controls
         }
 
         /// <summary>
-        /// Identifies the <see cref="Control.FontWeight"/> dependency property.
+        /// Identifies the <see cref="FontWeight"/> dependency property.
         /// </summary>
         public static readonly DependencyProperty FontWeightProperty =
-            DependencyProperty.Register(
-                nameof(FontWeight), 
-                typeof(FontWeight), 
+            TextElementProperties.FontWeightProperty.AddOwner(
                 typeof(Control),
-                new FrameworkPropertyMetadata(FontWeights.Normal, FrameworkPropertyMetadataOptions.AffectsMeasure)
+                new FrameworkPropertyMetadata(FontWeights.Normal, FrameworkPropertyMetadataOptions.AffectsMeasure | FrameworkPropertyMetadataOptions.Inherits)
                 {
-                    Inherits = true,
-                    GetCSSEquivalent = (instance) => new CSSEquivalent
+                    MethodToUpdateDom2 = static (d, oldValue, newValue) =>
                     {
-                        Value = (inst, value) => ((FontWeight)value).ToOpenTypeWeight().ToInvariantString(),
-                        Name = new List<string> { "fontWeight" },
-                        ApplyAlsoWhenThereIsAControlTemplate = true // (See comment where this property is defined)
-                    }
+                        var c = (Control)d;
+                        var style = INTERNAL_HtmlDomManager.GetDomElementStyleForModification(c.INTERNAL_OuterDomElement);
+                        style.fontWeight = ((FontWeight)newValue).ToOpenTypeWeight().ToInvariantString();
+                    },
                 });
 
         /// <summary>
@@ -221,7 +219,7 @@ namespace Windows.UI.Xaml.Controls
         }
 
         /// <summary>
-        /// Identifies the <see cref="Control.FontStyle"/> dependency property.
+        /// Identifies the <see cref="FontStyle"/> dependency property.
         /// </summary>
         public static readonly DependencyProperty FontStyleProperty =
             DependencyProperty.Register(
@@ -234,15 +232,14 @@ namespace Windows.UI.Xaml.Controls
 #else
                     FontStyle.Normal
 #endif
-                    , FrameworkPropertyMetadataOptions.AffectsMeasure
-                    )
+                    , FrameworkPropertyMetadataOptions.AffectsMeasure)
                 {
-                    GetCSSEquivalent = (instance) => new CSSEquivalent
+                    MethodToUpdateDom2 = static (d, oldValue, newValue) =>
                     {
-                        Value = (inst, value) => ((FontStyle)value).ToString().ToLower(),
-                        Name = new List<string> { "fontStyle" },
-                        ApplyAlsoWhenThereIsAControlTemplate = true // (See comment where this property is defined)
-                    }
+                        var c = (Control)d;
+                        var style = INTERNAL_HtmlDomManager.GetDomElementStyleForModification(c.INTERNAL_OuterDomElement);
+                        style.fontStyle = ((FontStyle)newValue).ToString().ToLower();
+                    },
                 });
 
         //-----------------------
@@ -306,7 +303,7 @@ namespace Windows.UI.Xaml.Controls
         }
 
         /// <summary>
-        /// Identifies the <see cref="Control.FontFamily"/> dependency property.
+        /// Identifies the <see cref="FontFamily"/> dependency property.
         /// </summary>
         public static readonly DependencyProperty FontFamilyProperty =
             DependencyProperty.Register(
@@ -315,14 +312,14 @@ namespace Windows.UI.Xaml.Controls
                 typeof(Control),
                 new FrameworkPropertyMetadata(null, FrameworkPropertyMetadataOptions.AffectsMeasure)
                 {
-                    GetCSSEquivalent = (instance) => new CSSEquivalent
+                    MethodToUpdateDom2 = static (d, oldValue, newValue) =>
                     {
-                        Value = (inst, value) => (value is FontFamily) ?
-                            INTERNAL_FontsHelper.LoadFont(((FontFamily)value).Source, (UIElement)instance) :
-                            string.Empty,
-                        Name = new List<string> { "fontFamily" },
-                        ApplyAlsoWhenThereIsAControlTemplate = true // (See comment where this property is defined)
-                    }
+                        var c = (Control)d;
+                        var style = INTERNAL_HtmlDomManager.GetDomElementStyleForModification(c.INTERNAL_OuterDomElement);
+                        style.fontFamily = newValue is FontFamily ff ?
+                            INTERNAL_FontsHelper.LoadFont(ff.Source, c) :
+                            string.Empty;
+                    },
                 });
 
         //-----------------------
@@ -339,23 +336,20 @@ namespace Windows.UI.Xaml.Controls
         }
 
         /// <summary>
-        /// Identifies the <see cref="Control.FontSize"/> dependency property.
+        /// Identifies the <see cref="FontSize"/> dependency property.
         /// </summary>
         public static readonly DependencyProperty FontSizeProperty =
-            DependencyProperty.Register(
-                nameof(FontSize), 
-                typeof(double), 
+            TextElementProperties.FontSizeProperty.AddOwner(
                 typeof(Control),
-                new FrameworkPropertyMetadata(11d, FrameworkPropertyMetadataOptions.AffectsMeasure)
-                { 
-                    Inherits = true,
+                new FrameworkPropertyMetadata(11d, FrameworkPropertyMetadataOptions.AffectsMeasure | FrameworkPropertyMetadataOptions.Inherits)
+                {
                     GetCSSEquivalent = (instance) => new CSSEquivalent
                     {
                         Value = (inst, value) =>
                         {
                             // Note: We multiply by 1000 and then divide by 1000 so as to only keep 3 
                             // decimals at the most.
-                            return (Math.Floor(Convert.ToDouble(value) * 1000) / 1000).ToInvariantString() + "px"; 
+                            return (Math.Floor(Convert.ToDouble(value) * 1000) / 1000).ToInvariantString() + "px";
                         },
                         Name = new List<string> { "fontSize" },
                         ApplyAlsoWhenThereIsAControlTemplate = true // (See comment where this property is defined)
@@ -639,7 +633,7 @@ namespace Windows.UI.Xaml.Controls
             Control control = (Control)d;
             FrameworkElement.UpdateTemplateCache(control, (FrameworkTemplate)e.OldValue, (FrameworkTemplate)e.NewValue, TemplateProperty);
 
-            if (control.IsConnectedToLiveTree)
+            if (INTERNAL_VisualTreeManager.IsElementInVisualTree(control))
             {
                 control.InvalidateMeasureInternal();
             }

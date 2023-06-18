@@ -24,21 +24,21 @@ namespace Windows.UI.Xaml
     {
         #region InheritablePropertyChange
 
-        internal static void InvalidateOnInheritablePropertyChange(FrameworkElement fe, InheritablePropertyChangeInfo info, bool skipStartNode)
+        internal static void InvalidateOnInheritablePropertyChange(IInternalFrameworkElement fe, InheritablePropertyChangeInfo info, bool skipStartNode)
         {
             if (HasChildren(fe))
             {
                 DescendentsWalker<InheritablePropertyChangeInfo> walker = new DescendentsWalker<InheritablePropertyChangeInfo>(
                     TreeWalkPriority.LogicalTree, InheritablePropertyChangeDelegate, info);
 
-                walker.StartWalk(fe, skipStartNode);
+                walker.StartWalk(fe.AsDependencyObject(), skipStartNode);
             }
             else if (!skipStartNode)
             {
                 // Degenerate case when the current node is a leaf node and has no children.
                 // If the current node needs a notification, do so now.
                 bool visitedViaVisualTree = false;
-                OnInheritablePropertyChanged(fe, info, visitedViaVisualTree);
+                OnInheritablePropertyChanged(fe.AsDependencyObject(), info, visitedViaVisualTree);
             }
         }
 
@@ -54,12 +54,13 @@ namespace Windows.UI.Xaml
             Debug.Assert(d != null, "Must have non-null current node");
 
             DependencyProperty dp = info.Property;
-            bool inheritanceNode = IsInheritanceNode(d, dp);
+            PropertyMetadata metadata = dp.GetMetadata(d.DependencyObjectType);
+            bool inheritanceNode = IsInheritanceNode(metadata);
 
             if (inheritanceNode)
             {
                 BaseValueSourceInternal oldValueSource = BaseValueSourceInternal.Default;
-                if (INTERNAL_PropertyStore.TryGetInheritedPropertyStorage(d, dp, null, false, out INTERNAL_PropertyStorage storage))
+                if (INTERNAL_PropertyStore.TryGetInheritedPropertyStorage(d, dp, metadata, false, out INTERNAL_PropertyStorage storage))
                 {
                     oldValueSource = storage.Entry.BaseValueSourceInternal;
                 }
@@ -68,9 +69,9 @@ namespace Windows.UI.Xaml
                 // only then do we need to Invalidate the property
                 if (BaseValueSourceInternal.Inherited >= oldValueSource)
                 {
-                    if (visitedViaVisualTree && typeof(FrameworkElement).IsInstanceOfType(d))
+                    if (visitedViaVisualTree && typeof(IInternalFrameworkElement).IsInstanceOfType(d))
                     {
-                        DependencyObject logicalParent = ((FrameworkElement)d).Parent;
+                        DependencyObject logicalParent = ((IInternalFrameworkElement)d).Parent;
                         if (logicalParent != null)
                         {
                             DependencyObject visualParent = VisualTreeHelper.GetParent(d);
@@ -81,7 +82,7 @@ namespace Windows.UI.Xaml
                         }
                     }
 
-                    return d.SetInheritedValue(dp, info.NewValue, false);
+                    return d.SetInheritedValue(dp, metadata, info.NewValue, false);
                 }
                 else
                 {
@@ -90,7 +91,7 @@ namespace Windows.UI.Xaml
                         // get the storage if we didn't to it ealier.
                         INTERNAL_PropertyStore.TryGetInheritedPropertyStorage(d,
                             dp,
-                            dp.GetMetadata(d.GetType()),
+                            metadata,
                             true,
                             out storage);
                     }
@@ -111,19 +112,9 @@ namespace Windows.UI.Xaml
         ///     Determine if the current DependencyObject is a candidate for
         ///     producing inheritable values
         /// </summary>
-        private static bool IsInheritanceNode(
-            DependencyObject d,
-            DependencyProperty dp)
+        internal static bool IsInheritanceNode(PropertyMetadata metadata)
         {
-            PropertyMetadata metadata = dp.GetMetadata(d.GetType());
-            if (metadata != null)
-            {
-                if (metadata.Inherits)
-                {
-                    return true;
-                }
-            }
-            return false;
+            return metadata is not null && metadata.Inherits;
         }
 
         #endregion InheritablePropertyChange
@@ -133,7 +124,7 @@ namespace Windows.UI.Xaml
         /// <summary>
         ///     Says if the current FE has visual or logical children
         /// </summary>
-        internal static bool HasChildren(FrameworkElement fe)
+        internal static bool HasChildren(IInternalFrameworkElement fe)
         {
             // See if we have logical or visual children, in which case this is a real tree invalidation.
             return fe != null && (fe.HasLogicalChildren || fe.HasVisualChildren);

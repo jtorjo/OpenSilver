@@ -13,10 +13,9 @@
 
 using System;
 using System.Collections;
-using System.Collections.Generic;
 using System.Windows.Markup;
 using OpenSilver.Internal.Controls;
-using OpenSilver.Internal.Xaml.Context;
+using CSHTML5.Internal;
 
 #if MIGRATION
 using System.Windows.Media;
@@ -36,7 +35,7 @@ namespace Windows.UI.Xaml.Controls
     /// existing controls and provides its own logic.
     /// </summary>
     [ContentProperty("Content")]
-    public partial class UserControl : Control
+    public partial class UserControl : Control, IUserControl
     {
         /// <summary> 
         /// Returns enumerator to logical children.
@@ -91,7 +90,7 @@ namespace Windows.UI.Xaml.Controls
             uc.RemoveLogicalChild(e.OldValue);
             uc.AddLogicalChild(e.NewValue);
 
-            if (uc.IsConnectedToLiveTree)
+            if (INTERNAL_VisualTreeManager.IsElementInVisualTree(uc))
             {
                 uc.InvalidateMeasureInternal();
             }
@@ -128,7 +127,7 @@ namespace Windows.UI.Xaml.Controls
                 Seal();
             }
 
-            internal override bool BuildVisualTree(FrameworkElement container)
+            internal override bool BuildVisualTree(IInternalFrameworkElement container)
             {
                 container.TemplateChild = ((UserControl)container).Content as FrameworkElement;
                 return false;

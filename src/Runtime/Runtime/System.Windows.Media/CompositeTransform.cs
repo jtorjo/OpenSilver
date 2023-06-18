@@ -1,5 +1,4 @@
 ﻿
-
 /*===================================================================================
 * 
 *   Copyright (c) Userware/OpenSilver.net
@@ -12,10 +11,9 @@
 *  
 \*====================================================================================*/
 
-
-using CSHTML5.Internal;
 using System;
 using System.Collections.Generic;
+using CSHTML5.Internal;
 
 #if !MIGRATION
 using Windows.Foundation;
@@ -30,7 +28,7 @@ namespace Windows.UI.Xaml.Media
     /// <summary>
     /// Applies multiple transform operations to an object.
     /// </summary>
-    public sealed partial class CompositeTransform : Transform
+    public sealed class CompositeTransform : Transform
     {
         /// <summary>
         /// Gets or sets the x-axis scale factor. You can use this property to stretch
@@ -360,6 +358,50 @@ namespace Windows.UI.Xaml.Media
             ((CompositeTransform)d).RaiseTransformChanged();
         }
 
+        /// <summary>
+        /// Identifies the <see cref="CenterX"/> dependency property.
+        /// </summary>
+        [OpenSilver.NotImplemented]
+        public static readonly DependencyProperty CenterXProperty =
+            DependencyProperty.Register(
+                nameof(CenterX),
+                typeof(double),
+                typeof(CompositeTransform),
+                new PropertyMetadata(0.0));
+
+        /// <summary>
+        /// Gets or sets the x-coordinate of the center point for all transforms specified
+        /// by the <see cref="CompositeTransform"/>.
+        /// </summary>
+        [OpenSilver.NotImplemented]
+        public double CenterX
+        {
+            get => (double)GetValue(CenterXProperty);
+            set => SetValue(CenterXProperty, value);
+        }
+
+        /// <summary>
+        /// Identifies the <see cref="CenterY"/> dependency property.
+        /// </summary>
+        [OpenSilver.NotImplemented]
+        public static readonly DependencyProperty CenterYProperty =
+            DependencyProperty.Register(
+                nameof(CenterY),
+                typeof(double),
+                typeof(CompositeTransform),
+                new PropertyMetadata(0.0));
+
+        /// <summary>
+        /// Gets or sets the y-coordinate of the center point for all transforms specified
+        /// by the <see cref="CompositeTransform"/>.
+        /// </summary>
+        [OpenSilver.NotImplemented]
+        public double CenterY
+        {
+            get => (double)GetValue(CenterYProperty);
+            set => SetValue(CenterYProperty, value);
+        }
+
         private void ApplyCSSChanges(double scaleX, double scaleY, double skewX, double skewY, double rotation, double translateX, double translateY)
         {
             //-------------
@@ -373,7 +415,7 @@ namespace Windows.UI.Xaml.Media
             //-------------
 
             //TranslateX:
-            CSSEquivalent translateXcssEquivalent = TranslateXProperty.GetTypeMetaData(typeof(CompositeTransform)).GetCSSEquivalent(this);
+            CSSEquivalent translateXcssEquivalent = TranslateXProperty.GetMetadata(DependencyObjectType).GetCSSEquivalent(this);
             if (translateXcssEquivalent != null)
             {
                 INTERNAL_HtmlDomManager.SetDomElementStylePropertyUsingVelocity(
@@ -383,7 +425,7 @@ namespace Windows.UI.Xaml.Media
             }
 
             //TranslateY:
-            CSSEquivalent translateYcssEquivalent = TranslateYProperty.GetTypeMetaData(typeof(CompositeTransform)).GetCSSEquivalent(this);
+            CSSEquivalent translateYcssEquivalent = TranslateYProperty.GetMetadata(DependencyObjectType).GetCSSEquivalent(this);
             if (translateYcssEquivalent != null)
             {
                 INTERNAL_HtmlDomManager.SetDomElementStylePropertyUsingVelocity(
@@ -393,7 +435,7 @@ namespace Windows.UI.Xaml.Media
             }
 
             //Rotation:
-            CSSEquivalent rotationcssEquivalent = RotationProperty.GetTypeMetaData(typeof(CompositeTransform)).GetCSSEquivalent(this);
+            CSSEquivalent rotationcssEquivalent = RotationProperty.GetMetadata(DependencyObjectType).GetCSSEquivalent(this);
             if (rotationcssEquivalent != null)
             {
                 INTERNAL_HtmlDomManager.SetDomElementStylePropertyUsingVelocity(
@@ -403,7 +445,7 @@ namespace Windows.UI.Xaml.Media
             }
 
             //SkewX:
-            CSSEquivalent skewXcssEquivalent = SkewXProperty.GetTypeMetaData(typeof(CompositeTransform)).GetCSSEquivalent(this);
+            CSSEquivalent skewXcssEquivalent = SkewXProperty.GetMetadata(DependencyObjectType).GetCSSEquivalent(this);
             if (skewXcssEquivalent != null)
             {
                 INTERNAL_HtmlDomManager.SetDomElementStylePropertyUsingVelocity(
@@ -413,7 +455,7 @@ namespace Windows.UI.Xaml.Media
             }
 
             //SkewY:
-            CSSEquivalent skewYcssEquivalent = SkewYProperty.GetTypeMetaData(typeof(CompositeTransform)).GetCSSEquivalent(this);
+            CSSEquivalent skewYcssEquivalent = SkewYProperty.GetMetadata(DependencyObjectType).GetCSSEquivalent(this);
             if (skewYcssEquivalent != null)
             {
                 INTERNAL_HtmlDomManager.SetDomElementStylePropertyUsingVelocity(
@@ -423,7 +465,7 @@ namespace Windows.UI.Xaml.Media
             }
 
             //ScaleX:
-            CSSEquivalent scaleXcssEquivalent = ScaleXProperty.GetTypeMetaData(typeof(CompositeTransform)).GetCSSEquivalent(this);
+            CSSEquivalent scaleXcssEquivalent = ScaleXProperty.GetMetadata(DependencyObjectType).GetCSSEquivalent(this);
             if (scaleXcssEquivalent != null)
             {
                 INTERNAL_HtmlDomManager.SetDomElementStylePropertyUsingVelocity(
@@ -433,7 +475,7 @@ namespace Windows.UI.Xaml.Media
             }
 
             //ScaleY:
-            CSSEquivalent scaleYcssEquivalent = ScaleYProperty.GetTypeMetaData(typeof(CompositeTransform)).GetCSSEquivalent(this);
+            CSSEquivalent scaleYcssEquivalent = ScaleYProperty.GetMetadata(DependencyObjectType).GetCSSEquivalent(this);
             if (scaleYcssEquivalent != null)
             {
                 INTERNAL_HtmlDomManager.SetDomElementStylePropertyUsingVelocity(
@@ -463,8 +505,8 @@ namespace Windows.UI.Xaml.Media
         {
             get
             {
-                double centerX = this.CenterX;
-                double centerY = this.CenterY;
+                double centerX = CenterX;
+                double centerY = CenterY;
                 bool hasCenter = centerX != 0 || centerY != 0;
 
                 // 1. Scale
@@ -493,5 +535,11 @@ namespace Windows.UI.Xaml.Media
                 return transform;
             }
         }
+
+        internal override bool IsIdentity =>
+            ScaleX == 1 && ScaleY == 1 &&
+            SkewX == 0 && SkewY == 0 &&
+            Rotation == 0 &&
+            TranslateX == 0 && TranslateY == 0;
     }
 }

@@ -27,7 +27,7 @@ namespace Windows.UI.Xaml.Media
     /// objects.
     /// </summary>
     [ContentProperty(nameof(Children))]
-    public sealed partial class TransformGroup : Transform
+    public sealed class TransformGroup : Transform
     {
         /// <summary>
         /// Initializes a new instance of the <see cref="TransformGroup"/> class.
@@ -46,16 +46,7 @@ namespace Windows.UI.Xaml.Media
         /// </returns>
         public TransformCollection Children
         {
-            get
-            {
-                var collection = (TransformCollection)GetValue(ChildrenProperty);
-                if (collection == null)
-                {
-                    collection = new TransformCollection();
-                    SetValue(ChildrenProperty, collection);
-                }
-                return collection;
-            }
+            get { return (TransformCollection)GetValue(ChildrenProperty); }
             set { SetValue(ChildrenProperty, value); }
         }
 
@@ -67,7 +58,18 @@ namespace Windows.UI.Xaml.Media
                 nameof(Children), 
                 typeof(TransformCollection), 
                 typeof(TransformGroup), 
-                new PropertyMetadata(null, OnChildrenChanged));
+                new PropertyMetadata(
+                    new PFCDefaultValueFactory<Transform>(
+                        static () => new TransformCollection(),
+                        static (d, dp) =>
+                        {
+                            TransformGroup tg = (TransformGroup)d;
+                            var collection = new TransformCollection();
+                            collection.SetParentTransform(tg);
+                            return collection;
+                        }),
+                    OnChildrenChanged,
+                    CoerceChildren));
 
         private static void OnChildrenChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
         {
@@ -77,6 +79,11 @@ namespace Windows.UI.Xaml.Media
             
             oldValue?.SetParentTransform(null);
             newValue?.SetParentTransform(transformGroup);
+        }
+
+        private static object CoerceChildren(DependencyObject d, object baseValue)
+        {
+            return baseValue ?? new TransformCollection();
         }
 
         /// <summary>
@@ -106,6 +113,28 @@ namespace Windows.UI.Xaml.Media
                 }
 
                 return transform;
+            }
+        }
+
+        internal override bool IsIdentity
+        {
+            get
+            {
+                TransformCollection children = (TransformCollection)GetValue(ChildrenProperty);
+                if (children == null || children.Count == 0)
+                {
+                    return true;
+                }
+
+                for (int i = 0; i < children.Count; i++)
+                {
+                    if (!children[i].IsIdentity)
+                    {
+                        return false;
+                    }
+                }
+
+                return true;
             }
         }
 

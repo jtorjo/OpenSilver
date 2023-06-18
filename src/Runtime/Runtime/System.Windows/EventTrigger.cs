@@ -14,6 +14,7 @@
 using System;
 using System.Diagnostics;
 using System.Windows.Markup;
+using OpenSilver.Internal;
 
 #if MIGRATION
 using System.Windows.Media.Animation;
@@ -50,7 +51,17 @@ namespace Windows.UI.Xaml
                 nameof(Actions),
                 typeof(TriggerActionCollection),
                 typeof(EventTrigger),
-                null);
+                new PropertyMetadata(
+                    new PFCDefaultValueFactory<TriggerAction>(
+                        static () => new TriggerActionCollection(),
+                        static (d, dp) => new TriggerActionCollection()),
+                    null,
+                    CoerceActions));
+
+        private static object CoerceActions(DependencyObject d, object baseValue)
+        {
+            return baseValue ?? new TriggerActionCollection();
+        }
 
         /// <summary>
         /// Gets the collection of <see cref="BeginStoryboard"/> objects
@@ -59,20 +70,7 @@ namespace Windows.UI.Xaml
         /// <returns>
         /// The existing <see cref="TriggerActionCollection"/>.
         /// </returns>
-        public TriggerActionCollection Actions
-        {
-            get 
-            {
-                TriggerActionCollection actions = (TriggerActionCollection)GetValue(ActionsProperty);
-                if (actions == null)
-                {
-                    actions = new TriggerActionCollection();
-                    SetValue(ActionsProperty, actions);
-                }
-
-                return actions;
-            }
-        }
+        public TriggerActionCollection Actions => (TriggerActionCollection)GetValue(ActionsProperty);
 
         /// <summary>
         /// Identifies the <see cref="RoutedEvent"/> dependency property.
@@ -104,7 +102,7 @@ namespace Windows.UI.Xaml
         //  built up.  This is the earliest point we can resolve all the child 
         //  node identification that may exist in a Trigger object.
         // This should be moved to base class if PropertyTrigger support is added.
-        internal static void ProcessTriggerCollection(FrameworkElement triggersHost)
+        internal static void ProcessTriggerCollection(IInternalFrameworkElement triggersHost)
         {
             TriggerCollection triggerCollection = (TriggerCollection)triggersHost.GetValue(FrameworkElement.TriggersProperty);
             if (triggerCollection != null)
@@ -124,7 +122,7 @@ namespace Windows.UI.Xaml
         //
         // Find the target element for this trigger, and set a listener for 
         // the event into (pointing back to the trigger).
-        internal static void ProcessOneTrigger(FrameworkElement triggersHost, TriggerBase triggerBase)
+        internal static void ProcessOneTrigger(IInternalFrameworkElement triggersHost, TriggerBase triggerBase)
         {
             // This code path is used in the element trigger case.  We don't actually
             //  need these guys to be usable cross-thread, so we don't really need
@@ -156,7 +154,7 @@ namespace Windows.UI.Xaml
         // DisconnectAllTriggers
         //
         // Call DisconnectOneTrigger for each trigger in the Triggers collection.
-        internal static void DisconnectAllTriggers(FrameworkElement triggersHost)
+        internal static void DisconnectAllTriggers(IInternalFrameworkElement triggersHost)
         {
             TriggerCollection triggerCollection = (TriggerCollection)triggersHost.GetValue(FrameworkElement.TriggersProperty);
 
@@ -174,7 +172,7 @@ namespace Windows.UI.Xaml
         //
         // In ProcessOneTrigger, we connect an event trigger to the element
         // which it targets.  Here, we remove the event listener to clean up.
-        internal static void DisconnectOneTrigger(FrameworkElement triggersHost, TriggerBase triggerBase)
+        internal static void DisconnectOneTrigger(IInternalFrameworkElement triggersHost, TriggerBase triggerBase)
         {
             EventTrigger eventTrigger = triggerBase as EventTrigger;
 
@@ -189,9 +187,9 @@ namespace Windows.UI.Xaml
             }
         }
 
-        private static void AddHandler(FrameworkElement fe, RoutedEvent routedEvent, RoutedEventHandler handler)
+        private static void AddHandler(IInternalFrameworkElement fe, RoutedEvent routedEvent, RoutedEventHandler handler)
         {
-            if (routedEvent == FrameworkElement.LoadedEvent)
+            if (routedEvent == fe.LoadedEvent)
             {
                 fe.Loaded += handler;
             }
@@ -201,9 +199,9 @@ namespace Windows.UI.Xaml
             }
         }
 
-        private static void RemoveHandler(FrameworkElement fe, RoutedEvent routedEvent, RoutedEventHandler handler)
+        private static void RemoveHandler(IInternalFrameworkElement fe, RoutedEvent routedEvent, RoutedEventHandler handler)
         {
-            if (routedEvent == FrameworkElement.LoadedEvent)
+            if (routedEvent == fe.LoadedEvent)
             {
                 fe.Loaded -= handler;
             }
@@ -215,7 +213,7 @@ namespace Windows.UI.Xaml
 
         internal sealed class EventTriggerSourceListener
         {
-            internal EventTriggerSourceListener(EventTrigger trigger, FrameworkElement host)
+            internal EventTriggerSourceListener(EventTrigger trigger, IInternalFrameworkElement host)
             {
                 _owningTrigger = trigger;
                 _owningTriggerHost = host;
@@ -232,7 +230,7 @@ namespace Windows.UI.Xaml
             }
 
             private readonly EventTrigger _owningTrigger;
-            private readonly FrameworkElement _owningTriggerHost;
+            private readonly IInternalFrameworkElement _owningTriggerHost;
         }
     }
 }
