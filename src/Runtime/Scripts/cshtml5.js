@@ -148,7 +148,10 @@ document.createElementSafe = function (tagName, id, parentElement, index) {
     const newElement = document.createElement(tagName);
 
     newElement.setAttribute('id', id);
-    newElement.setAttribute('xamlid', id);
+    Object.defineProperty(newElement, 'xamlid', {
+        value: id,
+        writable: false,
+    });
 
     if (typeof parentElement == 'string') {
         parentElement = document.getElementById(parentElement);
@@ -202,7 +205,10 @@ document.createPopupRootElement = function (id, rootElement, pointerEvents) {
 
     const popupRoot = document.createElement('div');
     popupRoot.setAttribute('id', id);
-    popupRoot.setAttribute('xamlid', id);
+    Object.defineProperty(popupRoot, 'xamlid', {
+        value: id,
+        writable: false,
+    });
     popupRoot.style.position = 'absolute';
     popupRoot.style.width = '100%';
     popupRoot.style.height = '100%';
@@ -311,6 +317,13 @@ document.setDomStyle = function (id, propertyName, value) {
 
     element.style[propertyName] = value;
 }
+
+document.setStyleProperty = function (id, propertyName, value, priority) {
+    const element = document.getElementById(id);
+    if (element) {
+        element.style.setProperty(propertyName, value, priority);
+    }
+};
 
 document.setDomTransform = function (id, value) {
     const element = document.getElementById(id);
@@ -425,8 +438,9 @@ document.createInputManager = function (callback) {
 
     function getClosestElementId(element) {
         while (element) {
-            if (element.hasAttribute('xamlid')) {
-                return element.getAttribute('xamlid');
+            const xamlid = element.xamlid;
+            if (xamlid) {
+                return xamlid;
             }
 
             element = element.parentElement;
@@ -653,10 +667,10 @@ document.eventCallback = function (callbackId, args, sync) {
     }
 }
 
-document.getCallbackFunc = function (callbackId, sync, sliceArguments) {
+document.getCallbackFunc = function (callbackId, sync) {
     return function () {
         return document.eventCallback(callbackId,
-            (sliceArguments) ? Array.prototype.slice.call(arguments) : arguments,
+            Array.prototype.slice.call(arguments),
             sync);
     };
 }
@@ -1398,25 +1412,17 @@ var jsilConfig = {
     ]
 };
 
-window.elementsFromPointOpensilver = function (x, y, element) {
-    if (!element) element = document.body;
-    const elements = [];
-    const walker = document.createTreeWalker(element, NodeFilter.SHOW_ELEMENT, null, false);
-    let currentNode = walker.currentNode;
-    while (currentNode) {
-        const xamlid = currentNode.getAttribute('xamlid');
-        if (xamlid && PerformHitTest(x, y, currentNode)) {
-            elements.push(xamlid);
+document.elementsFromPointOpenSilver = function (x, y) {
+    const ids = [];
+    const hitTestResults = document.elementsFromPoint(x, y);
+    for (const el of hitTestResults) {
+        const xamlid = el.xamlid;
+        if (xamlid) {
+            ids.push(xamlid);
         }
-        currentNode = walker.nextNode();
     }
-    return JSON.stringify(elements.reverse());
+    return JSON.stringify(ids);
 };
-
-function PerformHitTest(x, y, element) {
-    const rect = element.getBoundingClientRect();
-    return rect.x <= x && x <= rect.x + rect.width && rect.y <= y && y <= rect.y + rect.height;
-}
 
 //------------------------------
 // Just to check if client browser support touch
