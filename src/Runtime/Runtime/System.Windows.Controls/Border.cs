@@ -153,6 +153,8 @@ namespace Windows.UI.Xaml.Controls
             border.AddVisualChild(newChild);
 
             INTERNAL_VisualTreeManager.AttachVisualChildIfNotAlreadyAttached(newChild, border);
+
+            border.InvalidateMeasure();
         }
 
         protected internal override void INTERNAL_OnAttachedToVisualTree()
@@ -184,7 +186,7 @@ namespace Windows.UI.Xaml.Controls
                 nameof(Background),
                 typeof(Brush),
                 typeof(Border),
-                new PropertyMetadata((object)null)
+                new PropertyMetadata(null, OnBackgroundChanged)
                 {
                     MethodToUpdateDom2 = (d, oldValue, newValue) =>
                     {
@@ -193,6 +195,22 @@ namespace Windows.UI.Xaml.Controls
                         SetPointerEvents(border);
                     },
                 });
+
+        private static void OnBackgroundChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
+        {
+            Border border = (Border)d;
+            border.SizeChanged -= OnSizeChanged;
+            if (e.NewValue is LinearGradientBrush)
+            {
+                border.SizeChanged += OnSizeChanged;
+            }
+        }
+
+        private static void OnSizeChanged(object sender, SizeChangedEventArgs e)
+        {
+            Border b = (Border)sender;
+            _ = Panel.RenderBackgroundAsync(b, b.Background);
+        }
 
         /// <summary>
         /// Gets or sets a brush that describes the border background of a control.
@@ -343,53 +361,56 @@ namespace Windows.UI.Xaml.Controls
                 nameof(Padding),
                 typeof(Thickness),
                 typeof(Border),
-                new FrameworkPropertyMetadata(new Thickness(), FrameworkPropertyMetadataOptions.AffectsMeasure)
-                {
-                    MethodToUpdateDom = Padding_MethodToUpdateDom
-                },
+                new FrameworkPropertyMetadata(new Thickness(), FrameworkPropertyMetadataOptions.AffectsMeasure),
                 IsThicknessValid);
-
-        private static void Padding_MethodToUpdateDom(DependencyObject d, object newValue)
-        {
-            var border = (Border)d;
-
-            if (!border.IsUnderCustomLayout)
-            {
-                var newPadding = (Thickness)newValue;
-                var innerDomElement = border.INTERNAL_InnerDomElement;
-                var styleOfInnerDomElement = INTERNAL_HtmlDomManager.GetDomElementStyleForModification(innerDomElement);
-
-                // todo: if the container has a padding, add it to the margin
-                styleOfInnerDomElement.boxSizing = "border-box";
-                styleOfInnerDomElement.padding = $"{newPadding.Top.ToInvariantString()}px {newPadding.Right.ToInvariantString()}px {newPadding.Bottom.ToInvariantString()}px {newPadding.Left.ToInvariantString()}px";
-            }
-        }
 
         protected override Size MeasureOverride(Size availableSize)
         {
-            if (Child == null)
+            // Compute the chrome size added by the various elements
+            Size border = HelperCollapseThickness(BorderThickness);
+            Size padding = HelperCollapseThickness(Padding);
+
+            if (Child is UIElement child)
             {
-                return new Size();
+                // Combine into total decorating size
+                Size combined = new Size(border.Width + padding.Width, border.Height + padding.Height);
+
+                // Remove size of border only from child's reference size.
+                Size childConstraint = new Size(
+                    Math.Max(0.0, availableSize.Width - combined.Width),
+                    Math.Max(0.0, availableSize.Height - combined.Height));
+
+                child.Measure(childConstraint);
+                
+                return new Size(child.DesiredSize.Width + combined.Width, child.DesiredSize.Height + combined.Height);
             }
 
-            Size BorderThicknessSize = new Size(BorderThickness.Left + BorderThickness.Right, BorderThickness.Top + BorderThickness.Bottom);
-            Size PaddingSize = new Size(Padding.Left + Padding.Right, Padding.Top + Padding.Bottom);
-            Child.Measure(availableSize.Subtract(BorderThicknessSize).Subtract(PaddingSize).Max(new Size()));
-            return Child.DesiredSize.Add(BorderThicknessSize).Add(PaddingSize);
+            return new Size(border.Width + padding.Width, border.Height + padding.Height);
         }
 
         protected override Size ArrangeOverride(Size finalSize)
         {
-            if (Child != null)
+            Rect boundRect = new Rect(finalSize);
+            Rect innerRect = HelperDeflateRect(boundRect, BorderThickness);
+
+            //  arrange child
+            if (Child is UIElement child)
             {
-                Point PaddingLocation = new Point(Padding.Left, Padding.Top);
-                Size BorderThicknessSize = new Size(BorderThickness.Left + BorderThickness.Right, BorderThickness.Top + BorderThickness.Bottom);
-                Size PaddingSize = new Size(Padding.Left + Padding.Right, Padding.Top + Padding.Bottom);
-                Child.Arrange(new Rect(PaddingLocation, finalSize.Subtract(BorderThicknessSize).Subtract(PaddingSize).Max(new Size())));
+                Rect childRect = HelperDeflateRect(innerRect, Padding);
+                child.Arrange(childRect);
             }
 
             return finalSize;
         }
+
+        private static Size HelperCollapseThickness(Thickness th) => new Size(th.Left + th.Right, th.Top + th.Bottom);
+
+        /// Helper to deflate rectangle by thickness
+        private static Rect HelperDeflateRect(Rect rt, Thickness thick) =>
+            new Rect(rt.Left + thick.Left,
+                     rt.Top + thick.Top,
+                     Math.Max(0.0, rt.Width - thick.Left - thick.Right),
+                     Math.Max(0.0, rt.Height - thick.Top - thick.Bottom));
 
         private static bool IsThicknessValid(object value)
         {

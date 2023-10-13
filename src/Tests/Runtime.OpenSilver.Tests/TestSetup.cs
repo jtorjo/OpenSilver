@@ -73,6 +73,38 @@ namespace Runtime.OpenSilver.Tests
             {
                 return JsonDocument.Parse(@"""0|0""").RootElement;
             }
+            var patternFocus = @"document\.inputManager\.focus\(document\.getElementByIdSafe\(""([^""]*)""\)\);";
+            if (Regex.IsMatch(param, patternFocus))
+            {
+                return true;
+            }
+
+            var patternCreateMeasurement = @"document\.createMeasurementService\(document\.getElementByIdSafe\(""([^""]*)""\)\);";
+            var matchesCreateMeasurement = Regex.Matches(param, patternCreateMeasurement);
+            if (matchesCreateMeasurement.Count > 0)
+            {
+                var parentId = matchesCreateMeasurement[0].Groups[1].Value;
+                return parentId + "-msr";
+            }
+
+            var patternOffsetWidth = @"document\.getElementByIdSafe\(""([^""]*)""\)\.offsetWidth";
+            if (Regex.IsMatch(param, patternOffsetWidth))
+            {
+                return 0;
+            }
+
+            var patternOffsetHeight = @"document\.getElementByIdSafe\(""([^""]*)""\)\.offsetHeight";
+            if (Regex.IsMatch(param, patternOffsetHeight))
+            {
+                return 0;
+            }
+
+            var patternGetBox = @"document\.getBBox\(document\.getElementByIdSafe\(""([^""]*)""\)\);";
+            if (Regex.IsMatch(param, patternGetBox))
+            {
+                return JsonDocument.Parse("{\"x\":0,\"y\":0,\"width\":0,\"height\":0}").RootElement;
+            }
+
             return new JsonElement();
         }
 
@@ -91,6 +123,9 @@ namespace Runtime.OpenSilver.Tests
             javaScriptExecutionHandlerMock
                 .Setup(x => x.InvokeUnmarshalled<byte[], int, object>(It.IsAny<string>(), It.IsAny<byte[]>(), It.IsAny<int>()))
                 .Returns<string, byte[], int>((name, bytes, length) => ExecuteJsMock(Encoding.Unicode.GetString(bytes, 0, length)));
+            javaScriptExecutionHandlerMock
+                .Setup(x => x.InvokeUnmarshalled<string, int, bool, object>(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<int>(), It.IsAny<bool>()))
+                .Returns<string, string, int, bool>((name, js, refId, wantsResult) => ExecuteJsMock(js));
 
             var javaScriptExecutionHandler2 = javaScriptExecutionHandlerMock.Object;
             INTERNAL_Simulator.JavaScriptExecutionHandler = javaScriptExecutionHandler2;
